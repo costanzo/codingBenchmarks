@@ -1,0 +1,65 @@
+id: task_001
+category: 03_frontend_ui
+title: "Frontend UI Task 001"
+version: 1
+difficulty: hard
+language: Java
+jdk: 17
+
+paths:
+  prompt: prompt.md
+  workspace: workspace/keycloak
+  result: result.md
+  artifacts: artifacts
+  worktree: workspace/keycloak
+
+execution_policy:
+  mode: agent_managed
+  agent_may_run_code: true
+  agent_may_run_tests: true
+  agent_may_run_workspace_commands: true
+  repository_grading_scripts: false
+  repository_under_test: keycloak
+  worktree_path: workspace/keycloak
+  branch_pattern: bench/<MODEL_CODE>/<CATEGORY>/<TASK_ID>
+  expected_jdk: 17
+
+scoring:
+  scale:
+    min: 1.0
+    max: 5.0
+    increment: 0.5
+  dimensions:
+    correctness:
+      weight: 0.40
+    completeness:
+      weight: 0.20
+    code_quality:
+      weight: 0.20
+    reasoning:
+      weight: 0.10
+    report_quality:
+      weight: 0.10
+
+grading:
+  mode: manual_report_review
+  score_output: result.md
+
+result_contract:
+  required_sections:
+    - Status
+    - Summary
+    - Files Changed
+    - Approach and Reasoning
+    - Rating
+    - Token Usage
+    - Notes
+
+reporting:
+  include_in_leaderboard: true
+  public_name: "Frontend UI Task 001"
+
+
+
+
+

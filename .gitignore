@@ -1,0 +1,6 @@
+*.class
+**/workspace/out/
+**/workspace/keycloak/*
+!**/workspace/keycloak/.gitkeep
+.DS_Store
+Thumbs.db
