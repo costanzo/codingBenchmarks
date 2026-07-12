@@ -4,3 +4,4 @@
 !**/workspace/keycloak/.gitkeep
 .DS_Store
 Thumbs.db
+.idea/

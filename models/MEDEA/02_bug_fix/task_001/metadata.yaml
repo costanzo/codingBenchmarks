@@ -1,11 +1,16 @@
 id: task_001
 category: 02_bug_fix
-title: "Bug Fixing Task 001"
+title: "SAML Client Creation Fails For Client IDs With Query Characters"
 version: 1
 difficulty: hard
 language: Java
 jdk: 17
 
+source:
+  type: github_issue
+  url: https://github.com/keycloak/keycloak/issues/50177
+  repository: keycloak/keycloak
+  issue_number: 50177
 paths:
   prompt: prompt.md
   workspace: workspace/keycloak
@@ -24,20 +29,31 @@ execution_policy:
   branch_pattern: bench/<MODEL_CODE>/<CATEGORY>/<TASK_ID>
   expected_jdk: 17
 
+bug:
+  area: saml
+  affected_flow: SAML client creation in Admin Console
+  suspected_components:
+    - org.keycloak.protocol.saml.SamlProtocolFactory
+    - org.keycloak.models.utils.KeycloakModelUtils
+    - org.keycloak.common.util.CertificateUtils
+    - org.keycloak.crypto.def.BCCertificateUtilsProvider
+  trigger: Client ID contains URL query-string or X.500 DN-special characters
+  expected_behavior: SAML client creation succeeds regardless of Client ID format
+
 scoring:
   scale:
     min: 1.0
     max: 5.0
     increment: 0.5
   dimensions:
+    root_cause_analysis:
+      weight: 0.20
     correctness:
-      weight: 0.40
-    completeness:
+      weight: 0.30
+    regression_safety:
       weight: 0.20
-    code_quality:
+    test_quality:
       weight: 0.20
-    reasoning:
-      weight: 0.10
     report_quality:
       weight: 0.10
 
@@ -51,15 +67,12 @@ result_contract:
     - Summary
     - Files Changed
     - Approach and Reasoning
+    - Tests
     - Rating
     - Token Usage
     - Notes
 
 reporting:
   include_in_leaderboard: true
-  public_name: "Bug Fixing Task 001"
-
-
-
-
+  public_name: "Bug Fix: SAML Client ID Certificate Subject Escaping"
 

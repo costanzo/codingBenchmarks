@@ -1,5 +1,7 @@
 {
     "yaml.disableSchemaDetection": [
-        "file:///d%3A/appData/github/costanzo/codingBenchmarks/tasks/06_test_generation/task_001/metadata.yaml"
+        "file:///d%3A/appData/github/costanzo/codingBenchmarks/tasks/06_test_generation/task_001/metadata.yaml",
+        "file:///d%3A/appData/github/costanzo/codingBenchmarks/tasks/02_bug_fix/task_001/metadata.yaml",
+        "file:///d%3A/appData/github/costanzo/codingBenchmarks/models/CASSANDRA/02_bug_fix/task_001/metadata.yaml"
     ]
 }
