@@ -17,7 +17,8 @@ bench/<MODEL_CODE>/<CATEGORY>/<TASK_ID>
 Example:
 
 ```text
-bench/CASSANDRA/01_algorithm/task_001
+bench/CASSANDRA/02_bug_fix/task_001
 ```
 
 The coding agent should work inside `workspace/keycloak/`, may run normal workspace commands if useful, and must write the final report to the sibling `result.md` file in the task directory.
+

@@ -1,23 +1,18 @@
-# Workspace
+# Algorithm Workspace
 
-Place the task-specific Keycloak git worktree in this directory as:
+This task is standalone and does not use Keycloak.
 
-```text
-workspace/keycloak/
-```
+Use this directory for a Java implementation targeting JDK 17.
 
-The Keycloak worktree should be created from the benchmark run's pinned base branch and base commit.
-
-Expected branch naming:
+Recommended layout:
 
 ```text
-bench/<MODEL_CODE>/<CATEGORY>/<TASK_ID>
+workspace/algorithm/src/main/java/TemporalDependencyRouter.java
+workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java
 ```
 
-Example:
+The final report belongs in the sibling task file:
 
 ```text
-bench/CASSANDRA/01_algorithm/task_001
+result.md
 ```
-
-The coding agent should work inside `workspace/keycloak/`, may run normal workspace commands if useful, and must write the final report to the sibling `result.md` file in the task directory.

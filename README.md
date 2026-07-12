@@ -2,7 +2,7 @@
 
 This project evaluates coding agents with anonymized model codes from Greek myth.
 
-The benchmark is file-based and worktree-based. Each task keeps benchmark artifacts under `models/<MODEL_CODE>/<CATEGORY>/<TASK_ID>/`, while the real project under test lives inside that task's `workspace/keycloak/` directory as a git worktree.
+The benchmark is file-based. Most tasks are worktree-based: each task keeps benchmark artifacts under `models/<MODEL_CODE>/<CATEGORY>/<TASK_ID>/`, while the real project under test lives inside that task's `workspace/keycloak/` directory as a git worktree. The `01_algorithm/task_001` task is the standalone exception and uses `workspace/algorithm/` instead of Keycloak.
 
 ## Repository Under Test
 
@@ -12,7 +12,7 @@ Required language/runtime:
 
 - Java
 - JDK 17
-- Keycloak worktree per model per task
+- Keycloak worktree per model per Keycloak-based task
 
 The coding agent may run normal commands inside its task worktree if useful, including Java/JDK commands, tests, or project build commands. The benchmark repo itself does not provide external grading scripts; the final report must be written to each task's `result.md`.
 
@@ -47,14 +47,22 @@ codingBenchmarks/
         result.md
         artifacts/
         workspace/
-          keycloak/
-            # git worktree branch: bench/CASSANDRA/01_algorithm/task_001
+          algorithm/
+            # standalone Java algorithm workspace
       02_bug_fix/task_001/
-        workspace/keycloak/
+        prompt.md
+        metadata.yaml
+        result.md
+        artifacts/
+        workspace/
+          keycloak/
+            # git worktree branch: bench/CASSANDRA/02_bug_fix/task_001
       ...
 
     MEDEA/
       01_algorithm/task_001/
+        workspace/algorithm/
+      02_bug_fix/task_001/
         workspace/keycloak/
       ...
 
@@ -74,15 +82,15 @@ bench/<MODEL_CODE>/<CATEGORY>/<TASK_ID>
 Examples:
 
 ```text
-bench/CASSANDRA/01_algorithm/task_001
-bench/MEDEA/01_algorithm/task_001
+bench/CASSANDRA/02_bug_fix/task_001
+bench/MEDEA/02_bug_fix/task_001
 ```
 
 Recommended worktree locations:
 
 ```text
-models/CASSANDRA/01_algorithm/task_001/workspace/keycloak
-models/MEDEA/01_algorithm/task_001/workspace/keycloak
+models/CASSANDRA/02_bug_fix/task_001/workspace/keycloak
+models/MEDEA/02_bug_fix/task_001/workspace/keycloak
 ```
 
 ## Workflow
@@ -90,7 +98,7 @@ models/MEDEA/01_algorithm/task_001/workspace/keycloak
 Open the coding agent in a model/task worktree, for example:
 
 ```bash
-cd models/CASSANDRA/01_algorithm/task_001/workspace/keycloak
+cd models/CASSANDRA/02_bug_fix/task_001/workspace/keycloak
 ```
 
 Then prompt it with something like:
@@ -127,9 +135,12 @@ Suggested dimensions:
 
 ## Benchmark Areas
 
-1. `01_algorithm`: complex Java algorithm implementation in Keycloak context
+1. `01_algorithm`: standalone complex Java algorithm implementation
 2. `02_bug_fix`: fix a described issue in Keycloak
 3. `03_frontend_ui`: implement a UI behavior in Keycloak
 4. `04_pr_review`: review a complex Keycloak PR and identify problems
 5. `05_code_analysis`: analyze Keycloak and produce project/domain analysis
 6. `06_test_generation`: add Java tests for Keycloak code
+
+
+

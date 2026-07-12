@@ -21,7 +21,7 @@ bench/<MODEL_CODE>/<CATEGORY>/<TASK_ID>
 Example:
 
 ```text
-bench/CASSANDRA/01_algorithm/task_001
+bench/CASSANDRA/04_pr_review/task_001
 ```
 
 ## Execution Policy
@@ -39,6 +39,7 @@ When finished, update `result.md` with:
 - self-assessed rating if requested
 - token usage if available
 - notes or limitations
+
 
 
 

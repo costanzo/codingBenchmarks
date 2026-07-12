@@ -8,7 +8,7 @@ The benchmark contract is:
 - Language/runtime target: Java with JDK 17
 - Build tool: Maven
 - Coding agent: OpenCode
-- Work layout: one Keycloak git worktree per model per task under `models/<MODEL_CODE>/<CATEGORY>/<TASK_ID>/workspace/keycloak/`
+- Work layout: one Keycloak git worktree per model per Keycloak-based task under `models/<MODEL_CODE>/<CATEGORY>/<TASK_ID>/workspace/keycloak/`. The `01_algorithm/task_001` task is standalone and uses `workspace/algorithm/`.
 
 ## 1. System Packages
 
@@ -187,24 +187,24 @@ For a fair run, every model and task must use the same `BASE_BRANCH` and `BASE_C
 
 ## 8. Create Per-Model Per-Task Worktrees
 
-From `upstream/keycloak`, create one worktree per model/task. Example for `CASSANDRA` algorithm task:
+From `upstream/keycloak`, create one worktree per model/task. Example for `CASSANDRA` bug-fix task:
 
 ```bash
 cd upstream/keycloak
 BASE_COMMIT=$(git rev-parse HEAD)
 
 git worktree add \
-  ../../models/CASSANDRA/01_algorithm/task_001/workspace/keycloak \
-  -b bench/CASSANDRA/01_algorithm/task_001 \
+  ../../models/CASSANDRA/02_bug_fix/task_001/workspace/keycloak \
+  -b bench/CASSANDRA/02_bug_fix/task_001 \
   "$BASE_COMMIT"
 ```
 
-Example for the same task for `MEDEA`:
+Example for the same bug-fix task for `MEDEA`:
 
 ```bash
 git worktree add \
-  ../../models/MEDEA/01_algorithm/task_001/workspace/keycloak \
-  -b bench/MEDEA/01_algorithm/task_001 \
+  ../../models/MEDEA/02_bug_fix/task_001/workspace/keycloak \
+  -b bench/MEDEA/02_bug_fix/task_001 \
   "$BASE_COMMIT"
 ```
 
@@ -225,7 +225,7 @@ models/<MODEL_CODE>/<CATEGORY>/<TASK_ID>/workspace/keycloak
 Open a model/task worktree:
 
 ```bash
-cd models/CASSANDRA/01_algorithm/task_001/workspace/keycloak
+cd models/CASSANDRA/02_bug_fix/task_001/workspace/keycloak
 ```
 
 Start OpenCode:
@@ -243,7 +243,7 @@ Read ../../prompt.md and complete the task in this Keycloak worktree using Java 
 The coding agent should edit files in `workspace/keycloak/`. The final benchmark report should be written to the sibling task file:
 
 ```text
-models/CASSANDRA/01_algorithm/task_001/result.md
+models/CASSANDRA/02_bug_fix/task_001/result.md
 ```
 
 ## 10. Capture Results
@@ -251,10 +251,10 @@ models/CASSANDRA/01_algorithm/task_001/result.md
 After a model finishes a task, inspect:
 
 ```bash
-git -C models/CASSANDRA/01_algorithm/task_001/workspace/keycloak status --short
-git -C models/CASSANDRA/01_algorithm/task_001/workspace/keycloak diff --stat
-git -C models/CASSANDRA/01_algorithm/task_001/workspace/keycloak diff
-cat models/CASSANDRA/01_algorithm/task_001/result.md
+git -C models/CASSANDRA/02_bug_fix/task_001/workspace/keycloak status --short
+git -C models/CASSANDRA/02_bug_fix/task_001/workspace/keycloak diff --stat
+git -C models/CASSANDRA/02_bug_fix/task_001/workspace/keycloak diff
+cat models/CASSANDRA/02_bug_fix/task_001/result.md
 ```
 
 Score manually using the benchmark's 1.0 to 5.0 half-point scale.
@@ -262,7 +262,7 @@ Score manually using the benchmark's 1.0 to 5.0 half-point scale.
 Recommended score file:
 
 ```text
-models/CASSANDRA/01_algorithm/task_001/score.md
+models/CASSANDRA/02_bug_fix/task_001/score.md
 ```
 
 Suggested `score.md` format:
@@ -303,7 +303,7 @@ When a benchmark run is over and results are saved, remove a worktree from the c
 
 ```bash
 cd upstream/keycloak
-git worktree remove ../../models/CASSANDRA/01_algorithm/task_001/workspace/keycloak
+git worktree remove ../../models/CASSANDRA/02_bug_fix/task_001/workspace/keycloak
 ```
 
 If Git reports stale metadata:
@@ -345,4 +345,5 @@ du -sh upstream/keycloak models ~/.m2 2>/dev/null
 - OpenCode docs: https://opencode.ai/docs/
 - OpenCode install script: https://opencode.ai/install
 - Keycloak GitHub repository: https://github.com/keycloak/keycloak
+
 
