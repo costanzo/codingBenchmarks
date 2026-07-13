@@ -1,10 +1,16 @@
 id: task_001
 category: 05_code_analysis
-title: "Code Analysis Task 001"
-version: 1
+title: "Browser Authentication Flow and Required Actions Analysis"
+version: 2
 difficulty: hard
 language: Java
 jdk: 17
+
+source:
+  type: keycloak_code_analysis
+  repository: keycloak/keycloak
+  domain: authentication
+  feature_area: browser_flow_required_actions
 
 paths:
   prompt: prompt.md
@@ -23,6 +29,24 @@ execution_policy:
   worktree_path: workspace/keycloak
   branch_pattern: bench/<MODEL_CODE>/<CATEGORY>/<TASK_ID>
   expected_jdk: 17
+  source_changes_expected: false
+
+analysis_task:
+  mode: architecture_and_flow_analysis
+  primary_topics:
+    - browser_authentication_flow
+    - required_actions
+    - authentication_session_lifecycle
+    - user_session_creation
+    - authenticator_extension_points
+    - required_action_extension_points
+  required_artifacts:
+    - sequence_diagram
+    - state_machine
+    - key_class_map
+    - source_referenced_execution_path
+    - edge_case_analysis
+    - security_checkpoint_analysis
 
 scoring:
   scale:
@@ -30,15 +54,17 @@ scoring:
     max: 5.0
     increment: 0.5
   dimensions:
-    correctness:
-      weight: 0.40
-    completeness:
+    code_path_accuracy:
+      weight: 0.30
+    state_machine_quality:
       weight: 0.20
-    code_quality:
-      weight: 0.20
-    reasoning:
+    sequence_diagram_quality:
+      weight: 0.15
+    required_action_understanding:
+      weight: 0.15
+    security_and_edge_cases:
       weight: 0.10
-    report_quality:
+    source_reference_quality:
       weight: 0.10
 
 grading:
@@ -48,18 +74,20 @@ grading:
 result_contract:
   required_sections:
     - Status
-    - Summary
-    - Files Changed
-    - Approach and Reasoning
-    - Rating
+    - Executive Summary
+    - Key Class and Interface Map
+    - Browser Authentication Sequence Diagram
+    - Required Action State Machine
+    - Execution Path
+    - Extension Points
+    - Session Model Relationships
+    - Security Checkpoints
+    - Edge Cases
+    - Files Inspected
+    - Commands Run
+    - Limitations
     - Token Usage
-    - Notes
 
 reporting:
   include_in_leaderboard: true
-  public_name: "Code Analysis Task 001"
-
-
-
-
-
+  public_name: "Code Analysis: Browser Authentication Flow and Required Actions"
