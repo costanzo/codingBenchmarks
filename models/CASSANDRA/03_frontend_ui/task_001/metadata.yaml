@@ -1,10 +1,16 @@
 id: task_001
 category: 03_frontend_ui
-title: "Frontend UI Task 001"
-version: 1
+title: "Organization Invitation Management UI"
+version: 2
 difficulty: hard
-language: Java
+language: TypeScript/React frontend with Java/JDK 17 runtime
 jdk: 17
+
+source:
+  type: keycloak_business_workflow
+  repository: keycloak/keycloak
+  domain: organizations
+  feature_area: admin_console_invitations
 
 paths:
   prompt: prompt.md
@@ -23,6 +29,25 @@ execution_policy:
   worktree_path: workspace/keycloak
   branch_pattern: bench/<MODEL_CODE>/<CATEGORY>/<TASK_ID>
   expected_jdk: 17
+  frontend_task_exception: true
+  allowed_frontend_stack:
+    - TypeScript
+    - React
+    - PatternFly
+    - Keycloak Admin Console frontend tests
+    - Keycloak admin-client bindings
+
+ui_task:
+  business_system: Organization management
+  workflow: Organization membership invitations
+  expected_surface: Keycloak Admin Console
+  required_capabilities:
+    - list_pending_invitations
+    - search_or_filter_invitations
+    - create_invitation
+    - revoke_invitation
+    - loading_empty_success_error_states
+    - i18n_and_accessibility
 
 scoring:
   scale:
@@ -30,15 +55,17 @@ scoring:
     max: 5.0
     increment: 0.5
   dimensions:
-    correctness:
-      weight: 0.40
-    completeness:
+    product_fit:
       weight: 0.20
-    code_quality:
+    admin_console_integration:
       weight: 0.20
-    reasoning:
-      weight: 0.10
-    report_quality:
+    workflow_completeness:
+      weight: 0.20
+    state_and_error_handling:
+      weight: 0.15
+    code_quality_and_maintainability:
+      weight: 0.15
+    verification_and_report_quality:
       weight: 0.10
 
 grading:
@@ -50,16 +77,13 @@ result_contract:
     - Status
     - Summary
     - Files Changed
-    - Approach and Reasoning
-    - Rating
+    - Navigation and Entry Points
+    - API and Client Integration
+    - UI States and Validation
+    - Tests and Verification
+    - Limitations
     - Token Usage
-    - Notes
 
 reporting:
   include_in_leaderboard: true
-  public_name: "Frontend UI Task 001"
-
-
-
-
-
+  public_name: "Frontend UI: Organization Invitation Management"

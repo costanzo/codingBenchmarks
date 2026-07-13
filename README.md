@@ -13,6 +13,7 @@ Required language/runtime:
 - Java
 - JDK 17
 - Keycloak worktree per model per Keycloak-based task
+- Frontend UI tasks may modify the existing Keycloak Admin Console TypeScript/React stack when the task explicitly requires it
 
 The coding agent may run normal commands inside its task worktree if useful, including Java/JDK commands, tests, or project build commands. The benchmark repo itself does not provide external grading scripts; the final report must be written to each task's `result.md`.
 
@@ -104,7 +105,7 @@ cd models/CASSANDRA/02_bug_fix/task_001/workspace/keycloak
 Then prompt it with something like:
 
 ```text
-Read ../../prompt.md and complete the task in this Keycloak worktree using Java targeting JDK 17. You may run normal workspace commands if useful. Put your final report in ../../result.md.
+Read ../../prompt.md and complete the task in this Keycloak worktree. Use Java targeting JDK 17 for backend/runtime code, and use the existing Admin Console TypeScript/React stack when the prompt is a frontend UI task. You may run normal workspace commands if useful. Put your final report in ../../result.md.
 ```
 
 Review `result.md` manually and assign a score using the 1.0 to 5.0 scale.
@@ -137,7 +138,7 @@ Suggested dimensions:
 
 1. `01_algorithm`: standalone complex Java algorithm implementation
 2. `02_bug_fix`: fix a described issue in Keycloak
-3. `03_frontend_ui`: implement a UI behavior in Keycloak
+3. `03_frontend_ui`: implement a Keycloak Admin Console UI workflow; this task may use TypeScript/React frontend code while preserving Java/JDK 17 runtime requirements
 4. `04_pr_review`: review a complex Keycloak PR and identify problems
 5. `05_code_analysis`: analyze Keycloak and produce project/domain analysis
 6. `06_test_generation`: add Java tests for Keycloak code
