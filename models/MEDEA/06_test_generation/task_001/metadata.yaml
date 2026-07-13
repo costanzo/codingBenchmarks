@@ -1,10 +1,16 @@
 id: task_001
 category: 06_test_generation
-title: "Test Generation Task 001"
-version: 1
+title: "Password Policy Test Coverage"
+version: 2
 difficulty: hard
 language: Java
 jdk: 17
+
+source:
+  type: keycloak_test_generation
+  repository: keycloak/keycloak
+  domain: authentication
+  feature_area: password_policy
 
 paths:
   prompt: prompt.md
@@ -23,6 +29,23 @@ execution_policy:
   worktree_path: workspace/keycloak
   branch_pattern: bench/<MODEL_CODE>/<CATEGORY>/<TASK_ID>
   expected_jdk: 17
+  production_changes_expected: false
+
+test_generation_task:
+  target_area: password_policy
+  required_language: Java
+  coverage_scope: targeted_password_policy_classes
+  minimum_line_coverage: 0.90
+  minimum_branch_coverage: 0.90
+  required_focus:
+    - valid_policy_configurations
+    - invalid_policy_configurations
+    - boundary_values
+    - combined_policies
+    - password_history
+    - user_attribute_related_policies
+    - malformed_inputs
+    - security_relevant_failures
 
 scoring:
   scale:
@@ -30,14 +53,14 @@ scoring:
     max: 5.0
     increment: 0.5
   dimensions:
-    correctness:
-      weight: 0.40
-    completeness:
+    coverage_improvement:
+      weight: 0.30
+    behavioral_correctness:
+      weight: 0.25
+    edge_case_quality:
       weight: 0.20
-    code_quality:
-      weight: 0.20
-    reasoning:
-      weight: 0.10
+    integration_with_existing_tests:
+      weight: 0.15
     report_quality:
       weight: 0.10
 
@@ -49,17 +72,15 @@ result_contract:
   required_sections:
     - Status
     - Summary
+    - Target Classes
     - Files Changed
-    - Approach and Reasoning
-    - Rating
+    - Test Strategy
+    - Commands Run
+    - Coverage Results
+    - Production Code Changes
+    - Limitations
     - Token Usage
-    - Notes
 
 reporting:
   include_in_leaderboard: true
-  public_name: "Test Generation Task 001"
-
-
-
-
-
+  public_name: "Test Generation: Password Policy Coverage"
