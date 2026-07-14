@@ -2,11 +2,12 @@
 
 ## Status
 
-not_started
+failed
 
 ## Summary
 
-No work has been submitted yet.
+MEDEA did not complete Task 001. The run spent approximately 3 minutes thinking and then stopped
+without producing implementation output, tests, or an updated task report.
 
 ## Files Changed
 
@@ -14,19 +15,20 @@ No work has been submitted yet.
 
 ## Approach and Reasoning
 
-No approach has been reported yet.
+No approach was reported. Because the model stopped without output, there is no implementation
+strategy, algorithmic reasoning, complexity analysis, or validation evidence to evaluate.
 
 ## Rating
 
-Overall Score: not_graded / 5
+Overall Score: 1.0 / 5
 
 ### Score Breakdown
 
-- Correctness: not_graded / 5
-- Completeness: not_graded / 5
-- Code Quality: not_graded / 5
-- Reasoning: not_graded / 5
-- Report Quality: not_graded / 5
+- Correctness: 1.0 / 5
+- Completeness: 1.0 / 5
+- Code Quality: 1.0 / 5
+- Reasoning: 1.0 / 5
+- Report Quality: 1.0 / 5
 
 ## Token Usage And Cost Inputs
 
@@ -37,9 +39,11 @@ Overall Score: not_graded / 5
 - total_tokens: unknown
 - estimated_cost_usd: unknown
 
-Use the model pricing in `models/<MODEL_CODE>/model.yaml` when estimating cost. If cache token counts are unavailable, write `unknown` and explain the limitation in Notes.
+No `session.json` or equivalent token log is present for the MEDEA Task 001 run, so token usage and
+estimated cost cannot be calculated from the available files.
 
 ## Notes
 
-No notes yet.
-
+- Failure mode: stopped after approximately 3 minutes with no output.
+- Workspace remains empty aside from the scaffold files.
+- Because no implementation or report was produced, this task should be counted as failed/incomplete.

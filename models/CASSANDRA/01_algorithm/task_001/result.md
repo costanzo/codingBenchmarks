@@ -82,20 +82,35 @@ early deadline cutoff prunes further. Input parsing and graph construction are `
 
 ## Self-Assessed Rating
 
-9/10. Correctness is strongly validated (sample + broad edge cases + 500-case differential fuzzing)
-and performance comfortably meets the stated large-input expectations in the tested workloads. A
-point is withheld because an adversarially constructed instance (very dense connectivity combined
-with maximal `popcount(R)=12` masks and long feasible deadlines across all 100000 queries) could
-still stress the `node × 2^P` state space beyond the tested envelope; the dominance pruning mitigates
-but does not asymptotically eliminate this theoretical worst case.
+Overall Score: 4.5 / 5
 
-## Token Usage / Cost
+### Score Breakdown
 
-Exact token usage and cost were not exposed to the agent by the runtime, so precise figures are
-unavailable. Rough order-of-magnitude for this session: on the order of ~60–90K total tokens across
-prompt reading, implementation, testing, and reporting. At Claude Opus-class pricing this corresponds
-to an estimated cost on the order of a few US dollars. These are estimates only; treat as
-approximate.
+- Correctness: 5.0 / 5
+- Completeness: 5.0 / 5
+- Code Quality: 4.5 / 5
+- Reasoning: 4.5 / 5
+- Report Quality: 4.5 / 5
+
+Correctness is strongly validated (sample + broad edge cases + 500-case differential fuzzing) and
+performance comfortably meets the stated large-input expectations in the tested workloads. The small
+deduction reflects the theoretical worst case: an adversarially constructed instance with very dense
+connectivity, maximal `popcount(R)=12` masks, and long feasible deadlines across all 100000 queries
+could still stress the `node × 2^P` state space beyond the tested envelope. Dominance pruning
+mitigates this but does not asymptotically eliminate it.
+
+## Token Usage And Cost Inputs
+
+- input_tokens: 34
+- output_tokens: 23023
+- cache_write_tokens: 37819
+- cache_hit_tokens: 429741
+- total_tokens: 490617
+- estimated_cost_usd: 1.02698425
+
+Cost uses the CASSANDRA rate card in `models/CASSANDRA/model.yaml`: $5.00 / MTok input, $25.00 /
+MTok output, $6.25 / MTok cache write, and $0.50 / MTok cache hit. Token and cost values come from
+`session.json`.
 
 ## Notes / Limitations
 
