@@ -1,0 +1,2032 @@
+{
+  "info": {
+    "id": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+    "slug": "hidden-river",
+    "projectID": "9c109d78e732dac0335fec41b4634d66701f814e",
+    "directory": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm",
+    "path": "models/CASSANDRA/01_algorithm/task_001/workspace/algorithm",
+    "title": "Java workspace task completion",
+    "agent": "build",
+    "model": {
+      "id": "claude-opus-4-8",
+      "providerID": "anthropic",
+      "variant": "high"
+    },
+    "version": "1.17.20",
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    },
+    "cost": 1.02698425,
+    "tokens": {
+      "input": 34,
+      "output": 23023,
+      "reasoning": 0,
+      "cache": {
+        "read": 429741,
+        "write": 37819
+      }
+    },
+    "time": {
+      "created": 1784037785195,
+      "updated": 1784038234254
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1784037785213
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "anthropic",
+          "modelID": "claude-opus-4-8",
+          "variant": "high"
+        },
+        "summary": {
+          "diffs": [
+            {
+              "file": "models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/main/java/TemporalDependencyRouter.java",
+              "patch": "Index: models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/main/java/TemporalDependencyRouter.java\n===================================================================\n--- models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/main/java/TemporalDependencyRouter.java\t\n+++ models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/main/java/TemporalDependencyRouter.java\t\n@@ -0,0 +1,463 @@\n+import java.io.DataInputStream;\n+import java.io.IOException;\n+import java.io.InputStream;\n+import java.io.OutputStream;\n+\n+/**\n+ * Temporal Dependency Router.\n+ *\n+ * <p>Solves earliest-arrival routing over a directed temporal graph whose edges are only usable\n+ * during specific time windows, subject to a required set of capabilities that must be accumulated\n+ * along the traversed route (including the source and target services).\n+ *\n+ * <p>Search strategy: per-query time-ordered (Dijkstra-like) label-setting search over states\n+ * {@code (node, capabilityMask)}. Because only the bits present in a query's required mask can ever\n+ * matter, capability masks are projected onto the required mask, which collapses the state space to\n+ * {@code node x 2^popcount(requiredMask)}. Exact-state deduplication plus superset-dominance pruning\n+ * eliminate redundant labels: a label is discarded if the same node already holds a label whose mask\n+ * is a superset and whose arrival time is no later.\n+ *\n+ * <p>All time arithmetic uses {@code long}. Input parsing is done with a hand-rolled byte reader,\n+ * adjacency is stored in CSR form, and the frontier uses a manual binary heap over primitive arrays\n+ * to avoid per-state object allocation in the hot loop.\n+ */\n+public final class TemporalDependencyRouter {\n+\n+    private TemporalDependencyRouter() {\n+    }\n+\n+    public static void main(String[] args) throws Exception {\n+        FastReader in = new FastReader(System.in);\n+        StringBuilder sb = new StringBuilder();\n+        Solver solver = Solver.read(in);\n+        int q = solver.q;\n+        for (int i = 0; i < q; i++) {\n+            int source = (int) in.nextLong();\n+            int target = (int) in.nextLong();\n+            long startTime = in.nextLong();\n+            long deadline = in.nextLong();\n+            int requiredMask = (int) in.nextLong();\n+            long ans = solver.query(source, target, startTime, deadline, requiredMask);\n+            sb.append(ans).append('\\n');\n+        }\n+        OutputStream out = System.out;\n+        out.write(sb.toString().getBytes());\n+        out.flush();\n+    }\n+\n+    /**\n+     * Immutable graph container plus per-query search. Reusable scratch buffers are held on the\n+     * instance and reset lazily per query using a generation stamp so repeated queries avoid\n+     * re-zeroing large arrays.\n+     */\n+    static final class Solver {\n+        final int n;\n+        final int m;\n+        final int k;\n+        final int q;\n+        final int[] cap; // cap[node], 1-indexed\n+\n+        // CSR adjacency over edges\n+        final int[] head;      // head[node] .. head[node+1] index range into edge arrays\n+        final int[] edgeTo;    // edgeTo[e]\n+        final int[] winStart;  // window range per edge into window arrays\n+        final int[] winEnd;\n+        final long[] wOpen;\n+        final long[] wClose;\n+        final long[] wLat;\n+\n+        // Per-query dominance table. For a given node we store labels as (mask,time) pairs.\n+        // Indexed by node in CSR-like fashion but sized dynamically per query using hashing-free\n+        // small arrays because the number of distinct masks per node is <= 2^popcount(R).\n+        Solver(int n, int m, int k, int q, int[] cap, int[] head, int[] edgeTo,\n+               int[] winStart, int[] winEnd, long[] wOpen, long[] wClose, long[] wLat) {\n+            this.n = n;\n+            this.m = m;\n+            this.k = k;\n+            this.q = q;\n+            this.cap = cap;\n+            this.head = head;\n+            this.edgeTo = edgeTo;\n+            this.winStart = winStart;\n+            this.winEnd = winEnd;\n+            this.wOpen = wOpen;\n+            this.wClose = wClose;\n+            this.wLat = wLat;\n+        }\n+\n+        static Solver read(FastReader in) throws IOException {\n+            int n = (int) in.nextLong();\n+            int m = (int) in.nextLong();\n+            int k = (int) in.nextLong();\n+            int q = (int) in.nextLong();\n+\n+            int[] cap = new int[n + 1];\n+            for (int i = 1; i <= n; i++) {\n+                cap[i] = (int) in.nextLong();\n+            }\n+\n+            int[] edgeToTmp = new int[m];\n+            int[] edgeFrom = new int[m];\n+            int[] winStart = new int[m];\n+            int[] winEnd = new int[m];\n+\n+            // first pass: read edges and windows into growable arrays\n+            long[] wOpen = new long[Math.max(1, m)];\n+            long[] wClose = new long[Math.max(1, m)];\n+            long[] wLat = new long[Math.max(1, m)];\n+            int wCount = 0;\n+\n+            int[] degree = new int[n + 2];\n+\n+            for (int e = 0; e < m; e++) {\n+                int u = (int) in.nextLong();\n+                int v = (int) in.nextLong();\n+                int w = (int) in.nextLong();\n+                edgeFrom[e] = u;\n+                edgeToTmp[e] = v;\n+                degree[u]++;\n+                winStart[e] = wCount;\n+                if (wCount + w > wOpen.length) {\n+                    int newCap = Math.max(wOpen.length * 2, wCount + w);\n+                    wOpen = grow(wOpen, newCap);\n+                    wClose = grow(wClose, newCap);\n+                    wLat = grow(wLat, newCap);\n+                }\n+                for (int j = 0; j < w; j++) {\n+                    wOpen[wCount] = in.nextLong();\n+                    wClose[wCount] = in.nextLong();\n+                    wLat[wCount] = in.nextLong();\n+                    wCount++;\n+                }\n+                winEnd[e] = wCount;\n+            }\n+\n+            // Build CSR ordering of edges by source node.\n+            int[] head = new int[n + 2];\n+            for (int i = 1; i <= n; i++) {\n+                head[i + 1] = head[i] + degree[i];\n+            }\n+            // head[node] gives start; use a cursor copy\n+            int[] cursor = new int[n + 2];\n+            System.arraycopy(head, 0, cursor, 0, n + 2);\n+            // shift: head[node] should be prefix sum starting index for node\n+            // Recompute properly: head[1]=0, head[node]=head[node-1]+degree[node-1]\n+            head[1] = 0;\n+            for (int i = 2; i <= n + 1; i++) {\n+                head[i] = head[i - 1] + degree[i - 1];\n+            }\n+            System.arraycopy(head, 0, cursor, 0, n + 2);\n+\n+            int[] edgeTo = new int[m];\n+            int[] winStartCsr = new int[m];\n+            int[] winEndCsr = new int[m];\n+            for (int e = 0; e < m; e++) {\n+                int u = edgeFrom[e];\n+                int pos = cursor[u]++;\n+                edgeTo[pos] = edgeToTmp[e];\n+                winStartCsr[pos] = winStart[e];\n+                winEndCsr[pos] = winEnd[e];\n+            }\n+\n+            return new Solver(n, m, k, q, cap, head, edgeTo, winStartCsr, winEndCsr,\n+                    wOpen, wClose, wLat);\n+        }\n+\n+        private static long[] grow(long[] a, int newLen) {\n+            long[] b = new long[newLen];\n+            System.arraycopy(a, 0, b, 0, a.length);\n+            return b;\n+        }\n+\n+        // ---- Per-query state ----\n+        // Manual binary heap over (time, packedState) where packedState = node*maskCount + mask.\n+        private long[] heapTime = new long[16];\n+        private long[] heapState = new long[16];\n+        private int heapSize = 0;\n+\n+        // Dominance labels per node: for each node a small list of (mask,time).\n+        // Stored via generation-stamped arrays to allow O(1) reset between queries.\n+        private long[][] nodeMasks = null; // lazily grown per node\n+        private long[][] nodeTimes = null;\n+        private int[] nodeCount = null;\n+        private int[] nodeGen = null;\n+        private int gen = 0;\n+\n+        private void ensureQueryBuffers() {\n+            if (nodeMasks == null) {\n+                nodeMasks = new long[n + 1][];\n+                nodeTimes = new long[n + 1][];\n+                nodeCount = new int[n + 1];\n+                nodeGen = new int[n + 1];\n+            }\n+        }\n+\n+        long query(int source, int target, long startTime, long deadline, int requiredMask) {\n+            ensureQueryBuffers();\n+            gen++;\n+            heapSize = 0;\n+\n+            // Project everything onto requiredMask bits only.\n+            int startMask = cap[source] & requiredMask;\n+\n+            if (startTime > deadline) {\n+                // Even the source cannot be \"arrived at\" within the deadline in a meaningful sense;\n+                // but source is reached at startTime. If startTime>deadline no route can be valid.\n+                return -1L;\n+            }\n+\n+            pushLabel(source, startMask, startTime, requiredMask);\n+\n+            while (heapSize > 0) {\n+                long t = heapTime[0];\n+                long packed = heapState[0];\n+                popTop();\n+\n+                if (t > deadline) {\n+                    // All remaining labels have time >= t > deadline.\n+                    return -1L;\n+                }\n+\n+                int maskCount = requiredMask + 1; // masks range 0..requiredMask, but only subsets valid\n+                int node = (int) (packed / maskCount);\n+                int mask = (int) (packed % maskCount);\n+\n+                // Stale check: if a dominating label now exists, skip.\n+                if (isStale(node, mask, t)) {\n+                    continue;\n+                }\n+\n+                if (node == target && mask == requiredMask) {\n+                    return t;\n+                }\n+\n+                // Relax outgoing edges.\n+                int hs = head[node];\n+                int he = head[node + 1];\n+                for (int e = hs; e < he; e++) {\n+                    int v = edgeTo[e];\n+                    long arrival = bestArrival(e, t);\n+                    if (arrival < 0 || arrival > deadline) {\n+                        continue;\n+                    }\n+                    int newMask = mask | (cap[v] & requiredMask);\n+                    pushLabel(v, newMask, arrival, requiredMask);\n+                }\n+            }\n+            return -1L;\n+        }\n+\n+        /**\n+         * Earliest arrival over all windows of edge index {@code e} given current time {@code t},\n+         * or -1 if the edge cannot be used.\n+         */\n+        private long bestArrival(int e, long t) {\n+            int s = winStart[e];\n+            int en = winEnd[e];\n+            long best = -1L;\n+            for (int w = s; w < en; w++) {\n+                long close = wClose[w];\n+                if (t > close) {\n+                    continue; // window expired for this current time\n+                }\n+                long open = wOpen[w];\n+                long depart = t > open ? t : open; // max(t, open)\n+                long arr = depart + wLat[w];\n+                if (best < 0 || arr < best) {\n+                    best = arr;\n+                }\n+            }\n+            return best;\n+        }\n+\n+        /**\n+         * Attempt to register a label (node, mask, time). Returns after inserting into the heap if it\n+         * is not dominated by an existing label. A label is dominated when the node already holds a\n+         * label with a superset mask and a time no greater than this one.\n+         */\n+        private void pushLabel(int node, int mask, long time, int requiredMask) {\n+            if (nodeGen[node] != gen) {\n+                nodeGen[node] = gen;\n+                nodeCount[node] = 0;\n+                if (nodeMasks[node] == null) {\n+                    nodeMasks[node] = new long[4];\n+                    nodeTimes[node] = new long[4];\n+                }\n+            }\n+            long[] masks = nodeMasks[node];\n+            long[] times = nodeTimes[node];\n+            int cnt = nodeCount[node];\n+\n+            // Dominance check + prune labels this new one dominates.\n+            for (int i = 0; i < cnt; i++) {\n+                int em = (int) masks[i];\n+                long et = times[i];\n+                // existing dominates new: existing mask superset of new AND existing time <= new time\n+                if ((em & mask) == mask && et <= time) {\n+                    return;\n+                }\n+            }\n+            // Insert; also drop any existing labels dominated by the new one to keep list small.\n+            int write = 0;\n+            for (int i = 0; i < cnt; i++) {\n+                int em = (int) masks[i];\n+                long et = times[i];\n+                boolean dominatedByNew = (mask & em) == em && time <= et;\n+                if (!dominatedByNew) {\n+                    masks[write] = em;\n+                    times[write] = et;\n+                    write++;\n+                }\n+            }\n+            cnt = write;\n+            if (cnt == masks.length) {\n+                int nl = masks.length * 2;\n+                long[] nm = new long[nl];\n+                long[] nt = new long[nl];\n+                System.arraycopy(masks, 0, nm, 0, cnt);\n+                System.arraycopy(times, 0, nt, 0, cnt);\n+                nodeMasks[node] = nm;\n+                nodeTimes[node] = nt;\n+                masks = nm;\n+                times = nt;\n+            }\n+            masks[cnt] = mask;\n+            times[cnt] = time;\n+            nodeCount[node] = cnt + 1;\n+\n+            int maskCount = requiredMask + 1;\n+            long packed = (long) node * maskCount + mask;\n+            heapPush(time, packed);\n+        }\n+\n+        /** A popped label is stale if no stored label for that node matches (mask,time) exactly\n+         *  as the best, i.e. a dominating label with strictly better standing now exists. */\n+        private boolean isStale(int node, int mask, long time) {\n+            if (nodeGen[node] != gen) {\n+                return true;\n+            }\n+            long[] masks = nodeMasks[node];\n+            long[] times = nodeTimes[node];\n+            int cnt = nodeCount[node];\n+            for (int i = 0; i < cnt; i++) {\n+                int em = (int) masks[i];\n+                long et = times[i];\n+                if ((em & mask) == mask && et <= time) {\n+                    // dominating (or equal) label exists; this popped label is only fresh if it IS\n+                    // that label (same mask and same time).\n+                    if (em == mask && et == time) {\n+                        return false;\n+                    }\n+                    return true;\n+                }\n+            }\n+            return true;\n+        }\n+\n+        // ---- manual binary heap keyed by time ----\n+        private void heapPush(long time, long packed) {\n+            if (heapSize == heapTime.length) {\n+                int nl = heapTime.length * 2;\n+                long[] nt = new long[nl];\n+                long[] ns = new long[nl];\n+                System.arraycopy(heapTime, 0, nt, 0, heapSize);\n+                System.arraycopy(heapState, 0, ns, 0, heapSize);\n+                heapTime = nt;\n+                heapState = ns;\n+            }\n+            int i = heapSize++;\n+            heapTime[i] = time;\n+            heapState[i] = packed;\n+            while (i > 0) {\n+                int parent = (i - 1) >>> 1;\n+                if (heapTime[parent] <= heapTime[i]) {\n+                    break;\n+                }\n+                swap(parent, i);\n+                i = parent;\n+            }\n+        }\n+\n+        private void popTop() {\n+            heapSize--;\n+            if (heapSize > 0) {\n+                heapTime[0] = heapTime[heapSize];\n+                heapState[0] = heapState[heapSize];\n+                int i = 0;\n+                while (true) {\n+                    int l = 2 * i + 1;\n+                    int r = 2 * i + 2;\n+                    int smallest = i;\n+                    if (l < heapSize && heapTime[l] < heapTime[smallest]) {\n+                        smallest = l;\n+                    }\n+                    if (r < heapSize && heapTime[r] < heapTime[smallest]) {\n+                        smallest = r;\n+                    }\n+                    if (smallest == i) {\n+                        break;\n+                    }\n+                    swap(smallest, i);\n+                    i = smallest;\n+                }\n+            }\n+        }\n+\n+        private void swap(int a, int b) {\n+            long t = heapTime[a];\n+            heapTime[a] = heapTime[b];\n+            heapTime[b] = t;\n+            long s = heapState[a];\n+            heapState[a] = heapState[b];\n+            heapState[b] = s;\n+        }\n+    }\n+\n+    /** Minimal fast reader for signed decimal longs from a byte stream. */\n+    static final class FastReader {\n+        private final DataInputStream din;\n+        private final byte[] buffer = new byte[1 << 16];\n+        private int bufferPointer = 0;\n+        private int bytesRead = 0;\n+\n+        FastReader(InputStream in) {\n+            din = new DataInputStream(in);\n+        }\n+\n+        long nextLong() throws IOException {\n+            int b = read();\n+            while (b != -1 && b != '-' && (b < '0' || b > '9')) {\n+                b = read();\n+            }\n+            if (b == -1) {\n+                throw new IOException(\"Unexpected EOF while reading number\");\n+            }\n+            boolean neg = false;\n+            if (b == '-') {\n+                neg = true;\n+                b = read();\n+            }\n+            long ret = 0;\n+            while (b >= '0' && b <= '9') {\n+                ret = ret * 10 + (b - '0');\n+                b = read();\n+            }\n+            return neg ? -ret : ret;\n+        }\n+\n+        private int read() throws IOException {\n+            if (bufferPointer == bytesRead) {\n+                fillBuffer();\n+                if (bytesRead == -1) {\n+                    return -1;\n+                }\n+            }\n+            return buffer[bufferPointer++];\n+        }\n+\n+        private void fillBuffer() throws IOException {\n+            bytesRead = din.read(buffer, 0, buffer.length);\n+            bufferPointer = 0;\n+        }\n+    }\n+}\n",
+              "additions": 463,
+              "deletions": 0,
+              "status": "added"
+            },
+            {
+              "file": "models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java",
+              "patch": "Index: models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java\n===================================================================\n--- models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java\t\n+++ models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java\t\n@@ -0,0 +1,161 @@\n+import java.io.ByteArrayInputStream;\n+import java.io.ByteArrayOutputStream;\n+import java.io.InputStream;\n+import java.io.PrintStream;\n+\n+/**\n+ * Standalone test harness (no external test framework) for {@link TemporalDependencyRouter}.\n+ *\n+ * <p>Each case feeds an input document to the router's {@code main} via a redirected\n+ * {@code System.in}/{@code System.out} and compares the produced stdout to an expected value.\n+ * Exit code is non-zero if any case fails.\n+ */\n+public final class TemporalDependencyRouterTest {\n+\n+    private static int failures = 0;\n+    private static int total = 0;\n+\n+    public static void main(String[] args) throws Exception {\n+        // Sample from the problem statement.\n+        run(\"sample\",\n+                \"4 4 3 3\\n\" +\n+                \"1\\n2\\n4\\n0\\n\" +\n+                \"1 2 2\\n0 10 5\\n20 30 1\\n\" +\n+                \"2 4 1\\n6 25 4\\n\" +\n+                \"1 3 1\\n0 100 3\\n\" +\n+                \"3 4 1\\n4 8 10\\n\" +\n+                \"1 4 0 20 3\\n\" +\n+                \"1 4 0 20 5\\n\" +\n+                \"1 4 11 40 3\\n\",\n+                \"10\\n14\\n25\\n\");\n+\n+        // Source equals target, capabilities already satisfied at source.\n+        run(\"source_equals_target_satisfied\",\n+                \"2 1 2 1\\n\" +\n+                \"3\\n0\\n\" +\n+                \"1 2 1\\n0 100 5\\n\" +\n+                \"1 1 7 50 3\\n\",\n+                \"7\\n\");\n+\n+        // Source equals target but capabilities NOT satisfied -> must leave and return.\n+        // Node1 cap=1(bit0), node2 cap=2(bit1). Need mask 3 at node1.\n+        // 1->2 window [0,100] lat 5, 2->1 window [0,100] lat 5. Start t=0.\n+        // Route: 1(t0,mask1) ->2(t5,mask3) ->1(t10,mask3). Answer 10.\n+        run(\"source_equals_target_needs_roundtrip\",\n+                \"2 2 2 1\\n\" +\n+                \"1\\n2\\n\" +\n+                \"1 2 1\\n0 100 5\\n\" +\n+                \"2 1 1\\n0 100 5\\n\" +\n+                \"1 1 0 50 3\\n\",\n+                \"10\\n\");\n+\n+        // Capability mask 0: only earliest arrival matters.\n+        run(\"mask_zero\",\n+                \"3 2 2 1\\n\" +\n+                \"0\\n0\\n0\\n\" +\n+                \"1 2 1\\n0 100 2\\n\" +\n+                \"2 3 1\\n0 100 3\\n\" +\n+                \"1 3 0 100 0\\n\",\n+                \"5\\n\");\n+\n+        // Unreachable target.\n+        run(\"unreachable\",\n+                \"3 1 1 1\\n\" +\n+                \"1\\n0\\n0\\n\" +\n+                \"1 2 1\\n0 100 2\\n\" +\n+                \"1 3 0 100 0\\n\",\n+                \"-1\\n\");\n+\n+        // Deadline exactly equal to arrival time (should succeed).\n+        run(\"deadline_exact\",\n+                \"2 1 1 1\\n\" +\n+                \"1\\n0\\n\" +\n+                \"1 2 1\\n0 100 5\\n\" +\n+                \"1 2 0 5 0\\n\",\n+                \"5\\n\");\n+\n+        // Deadline one less than arrival (should fail).\n+        run(\"deadline_miss\",\n+                \"2 1 1 1\\n\" +\n+                \"1\\n0\\n\" +\n+                \"1 2 1\\n0 100 5\\n\" +\n+                \"1 2 0 4 0\\n\",\n+                \"-1\\n\");\n+\n+        // Expired window forces waiting on a later window (query 3 style).\n+        run(\"expired_then_later_window\",\n+                \"2 1 0 1\\n\" +\n+                \"0\\n0\\n\" +\n+                \"1 2 2\\n0 5 1\\n20 30 2\\n\" +\n+                \"1 2 11 40 0\\n\",\n+                \"22\\n\");\n+\n+        // Weaker-early vs stronger-late tradeoff.\n+        // Need mask 2 (bit1) at target node3.\n+        // Path A: 1->3 direct arrives early but never collects bit1 (node3 cap=0) => invalid.\n+        // Path B: 1->2 (collect bit1) ->3 arrives later but valid.\n+        run(\"weak_early_vs_strong_late\",\n+                \"3 3 2 1\\n\" +\n+                \"0\\n2\\n0\\n\" +\n+                \"1 3 1\\n0 100 1\\n\" +\n+                \"1 2 1\\n0 100 3\\n\" +\n+                \"2 3 1\\n0 100 3\\n\" +\n+                \"1 3 0 100 2\\n\",\n+                \"6\\n\");\n+\n+        // Multiple windows: choose the one giving earliest valid arrival.\n+        // Window 3 opens at t=10 (must wait) -> arr=15; window 2 open now -> arr=40. Best is 15.\n+        run(\"multi_window_choose_best\",\n+                \"2 1 0 1\\n\" +\n+                \"0\\n0\\n\" +\n+                \"1 2 3\\n0 100 50\\n0 100 40\\n10 100 5\\n\" +\n+                \"1 2 0 100 0\\n\",\n+                \"15\\n\");\n+\n+        // startTime after deadline -> -1.\n+        run(\"start_after_deadline\",\n+                \"2 1 0 1\\n\" +\n+                \"0\\n0\\n\" +\n+                \"1 2 1\\n0 100 1\\n\" +\n+                \"1 2 50 40 0\\n\",\n+                \"-1\\n\");\n+\n+        // Parallel edges between same pair with different windows/latency.\n+        run(\"parallel_edges\",\n+                \"2 2 0 1\\n\" +\n+                \"0\\n0\\n\" +\n+                \"1 2 1\\n0 100 20\\n\" +\n+                \"1 2 1\\n0 100 7\\n\" +\n+                \"1 2 0 100 0\\n\",\n+                \"7\\n\");\n+\n+        System.out.println(\"\\n\" + (total - failures) + \"/\" + total + \" tests passed.\");\n+        if (failures > 0) {\n+            System.exit(1);\n+        }\n+    }\n+\n+    private static void run(String name, String input, String expected) throws Exception {\n+        total++;\n+        InputStream oldIn = System.in;\n+        PrintStream oldOut = System.out;\n+        ByteArrayOutputStream bos = new ByteArrayOutputStream();\n+        try {\n+            System.setIn(new ByteArrayInputStream(input.getBytes()));\n+            System.setOut(new PrintStream(bos));\n+            TemporalDependencyRouter.main(new String[0]);\n+        } finally {\n+            System.setIn(oldIn);\n+            System.setOut(oldOut);\n+        }\n+        String actual = bos.toString();\n+        if (actual.equals(expected)) {\n+            System.out.println(\"PASS  \" + name);\n+        } else {\n+            failures++;\n+            System.out.println(\"FAIL  \" + name\n+                    + \"\\n  expected: \" + expected.replace(\"\\n\", \"\\\\n\")\n+                    + \"\\n  actual:   \" + actual.replace(\"\\n\", \"\\\\n\"));\n+        }\n+    }\n+}\n",
+              "additions": 161,
+              "deletions": 0,
+              "status": "added"
+            }
+          ]
+        },
+        "id": "msg_f60f03e7d001YA0KGfsuY1lXaV",
+        "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Read ../../prompt.md and complete the task in this standalone Java workspace using JDK 17. You may run normal workspace commands if useful. Put your final report in ../../result.md, including token usage and estimated cost if available.",
+          "id": "prt_f60f03e7f001rZaTmhoXcSfzQX",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f03e7d001YA0KGfsuY1lXaV"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_f60f03e7d001YA0KGfsuY1lXaV",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "variant": "high",
+        "path": {
+          "cwd": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm",
+          "root": "/home/ubuntu/codingBenchmarks"
+        },
+        "cost": 0.07221,
+        "tokens": {
+          "total": 11236,
+          "input": 2,
+          "output": 106,
+          "reasoning": 0,
+          "cache": {
+            "write": 11128,
+            "read": 0
+          }
+        },
+        "modelID": "claude-opus-4-8",
+        "providerID": "anthropic",
+        "time": {
+          "created": 1784037785236,
+          "completed": 1784037789790
+        },
+        "finish": "tool-calls",
+        "id": "msg_f60f03e94001dZSc5dTSoGUw9F",
+        "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC"
+      },
+      "parts": [
+        {
+          "snapshot": "e70fa340354f30d2e6d6434916ef1c6864d75fb3",
+          "type": "step-start",
+          "id": "prt_f60f04afe001uD5yXuoQ6KySeY",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f03e94001dZSc5dTSoGUw9F"
+        },
+        {
+          "type": "reasoning",
+          "text": "I'll start by reading the prompt.md file to understand what I'm working with.",
+          "time": {
+            "start": 1784037788417,
+            "end": 1784037789641
+          },
+          "metadata": {
+            "anthropic": {
+              "signature": "EpECCokBCA8YAipA/PQT/0ytfn/5tUKIIKzQ91x2e+5F8XqLqVGXXhAFZK3PhevsBSi5Q3EDpU6V3XBw+7iJ693ws10ZZL0oXtTv6zIPY2xhdWRlLW9wdXMtNC04OABCCHRoaW5raW5nWiQ3YzIzYjYxZS02YzYwLTQ4ZDAtODU1YS01NzZiN2RhZDcxMmQSDN2zfsIAlMxCXIxQ5hoMxzh5rKqxSpHw8pmxIjCafP/jkhzzn38+7ismr0pE6t28O3yJZqwHdegEBiEwLzYu5Por1glLYq9wMdBp8KYqNbvpX00NhAugcx8f8rUCmueCg+7NUDvFKL3/dt5o8HIYUMOe8ne+Kr697aTVQT4oeX3zVRzPGAE="
+            }
+          },
+          "id": "prt_f60f04b0100132TlWPGJChPIV5",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f03e94001dZSc5dTSoGUw9F"
+        },
+        {
+          "type": "tool",
+          "tool": "read",
+          "callID": "toolu_018sT7PjP9fP7x5qaGTguQ7s",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/prompt.md"
+            },
+            "output": "<path>/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/prompt.md</path>\n<type>file</type>\n<content>\n1: # Algorithm Task 001: Temporal Dependency Router\n2: \n3: You are working inside this benchmark task directory.\n4: \n5: ## Goal\n6: \n7: Implement a standalone Java solution for a difficult temporal graph routing problem. This task does not use Keycloak or any other third-party project.\n8: \n9: All implementation code, test code, sample code, code snippets, and proposed patches for this task must be written in Java and should target JDK 17.\n10: \n11: ## Working Area\n12: \n13: Use this directory for the standalone algorithm implementation:\n14: \n15: ```text\n16: workspace/algorithm/\n17: ```\n18: \n19: Recommended layout:\n20: \n21: ```text\n22: workspace/algorithm/src/main/java/TemporalDependencyRouter.java\n23: workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java\n24: ```\n25: \n26: You may run normal workspace commands if they help you complete the task, including Java/JDK commands or tests. Do not modify files outside this task directory.\n27: \n28: ## Problem Statement\n29: \n30: A distributed platform contains `N` services connected by directed dependency calls. A dependency call from service `u` to service `v` is only available during specific time windows. Each available window has its own latency.\n31: \n32: Every service also provides zero or more capabilities. A request may require a set of capabilities to have been encountered before it reaches the target service. Capabilities are accumulated from every visited service, including the source and target.\n33: \n34: For each query, compute the earliest possible arrival time at the target service, starting at a given time, while satisfying the required capability set. If no valid route exists before the deadline, return `-1`.\n35: \n36: ## Formal Definition\n37: \n38: There are:\n39: \n40: - `N` services numbered `1..N`\n41: - `K` capability types numbered `0..K-1`\n42: - `M` directed temporal dependency edges\n43: - `Q` route queries\n44: \n45: Each service `i` has a capability bitmask `cap[i]`.\n46: \n47: Each directed edge has one or more availability windows. A window is:\n48: \n49: ```text\n50: openTime closeTime latency\n51: ```\n52: \n53: You may depart on that edge at time `t` if:\n54: \n55: ```text\n56: openTime <= t <= closeTime\n57: ```\n58: \n59: If you arrive at service `u` before `openTime`, you may wait until `openTime` and then take the edge. The arrival time at `v` is:\n60: \n61: ```text\n62: max(currentTime, openTime) + latency\n63: ```\n64: \n65: The edge cannot be used from that window if `currentTime > closeTime`.\n66: \n67: If multiple windows exist for the same edge, choose the window that produces the earliest valid arrival.\n68: \n69: For each query:\n70: \n71: ```text\n72: source target startTime deadline requiredCapabilityMask\n73: ```\n74: \n75: A route is valid only if:\n76: \n77: ```text\n78: arrivalTime <= deadline\n79: (accumulatedCapabilities & requiredCapabilityMask) == requiredCapabilityMask\n80: ```\n81: \n82: Return the minimum valid arrival time, or `-1` if no such route exists.\n83: \n84: ## Input Format\n85: \n86: ```text\n87: N M K Q\n88: cap[1]\n89: cap[2]\n90: ...\n91: cap[N]\n92: \n93: For each of M edges:\n94: u v W\n95: openTime_1 closeTime_1 latency_1\n96: openTime_2 closeTime_2 latency_2\n97: ...\n98: openTime_W closeTime_W latency_W\n99: \n100: For each of Q queries:\n101: source target startTime deadline requiredCapabilityMask\n102: ```\n103: \n104: All masks are non-negative decimal integers.\n105: \n106: ## Output Format\n107: \n108: Print one line per query:\n109: \n110: ```text\n111: earliestArrivalTime\n112: ```\n113: \n114: or:\n115: \n116: ```text\n117: -1\n118: ```\n119: \n120: ## Constraints\n121: \n122: The implementation should be designed for large inputs:\n123: \n124: ```text\n125: 1 <= N <= 100000\n126: 1 <= M <= 300000\n127: 0 <= K <= 12\n128: 1 <= Q <= 100000\n129: 1 <= total number of edge windows <= 600000\n130: 0 <= time values <= 1_000_000_000_000\n131: 1 <= latency <= 1_000_000_000\n132: ```\n133: \n134: Important performance expectations:\n135: \n136: - Use `long` for time values.\n137: - Avoid recursion that can overflow the stack.\n138: - Avoid object-heavy per-state allocations in hot loops where practical.\n139: - Use fast input parsing.\n140: - Use priority-queue based search, interval lookup, and dominance pruning where appropriate.\n141: \n142: ## Required Java API\n143: \n144: Implement a public class named:\n145: \n146: ```java\n147: public final class TemporalDependencyRouter\n148: ```\n149: \n150: It must support command-line execution from standard input/stdout:\n151: \n152: ```java\n153: public static void main(String[] args) throws Exception\n154: ```\n155: \n156: You may add helper classes inside the same file or package-private classes in additional Java files.\n157: \n158: ## Sample Input\n159: \n160: ```text\n161: 4 4 3 3\n162: 1\n163: 2\n164: 4\n165: 0\n166: 1 2 2\n167: 0 10 5\n168: 20 30 1\n169: 2 4 1\n170: 6 25 4\n171: 1 3 1\n172: 0 100 3\n173: 3 4 1\n174: 4 8 10\n175: 1 4 0 20 3\n176: 1 4 0 20 5\n177: 1 4 11 40 3\n178: ```\n179: \n180: ## Sample Output\n181: \n182: ```text\n183: 10\n184: 14\n185: 25\n186: ```\n187: \n188: ## Sample Explanation\n189: \n190: Query 1 requires capabilities `0` and `1`, mask `3`. Start at service `1` at time `0`, already collecting capability `0`. Take `1 -> 2` at time `0`, arrive at `5`, collect capability `1`, then wait until time `6` for `2 -> 4`, arriving at `10`.\n191: \n192: Query 2 requires capabilities `0` and `2`, mask `5`. Take `1 -> 3`, arrive at `3`, collect capability `2`, then wait until time `4` for `3 -> 4`, arriving at `14`.\n193: \n194: Query 3 starts at time `11`. The first `1 -> 2` window has expired, so wait for the second window at time `20`, arrive at service `2` at time `21`, then take `2 -> 4` and arrive at `25`.\n195: \n196: ## Edge Cases To Consider\n197: \n198: - Source equals target\n199: - Required capabilities already satisfied at source\n200: - Waiting for a future edge window\n201: - Multiple windows per edge\n202: - Multiple edges between the same pair of services\n203: - Expired windows\n204: - Deadline exactly equal to arrival time\n205: - Capability mask `0`\n206: - Unreachable target\n207: - Routes that arrive earlier but with weaker capabilities versus later routes with stronger capabilities\n208: \n209: ## Completion Requirements\n210: \n211: When finished, update `result.md` with:\n212: \n213: - final status\n214: - summary of work\n215: - files changed\n216: - approach and reasoning\n217: - algorithmic complexity\n218: - commands run and outcomes, if any\n219: - self-assessed rating if requested\n220: - token usage if available\n221: - notes or limitations\n222: \n\n(End of file - total 222 lines)\n</content>",
+            "metadata": {
+              "preview": "# Algorithm Task 001: Temporal Dependency Router\n\nYou are working inside this benchmark task directory.\n\n## Goal\n\nImplement a standalone Java solution for a difficult temporal graph routing problem. This task does not use Keycloak or any other third-party project.\n\nAll implementation code, test code, sample code, code snippets, and proposed patches for this task must be written in Java and should target JDK 17.\n\n## Working Area\n\nUse this directory for the standalone algorithm implementation:\n\n```text\nworkspace/algorithm/\n```\n\nRecommended layout:\n",
+              "truncated": false,
+              "loaded": [],
+              "display": {
+                "type": "file",
+                "path": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/prompt.md",
+                "text": "# Algorithm Task 001: Temporal Dependency Router\n\nYou are working inside this benchmark task directory.\n\n## Goal\n\nImplement a standalone Java solution for a difficult temporal graph routing problem. This task does not use Keycloak or any other third-party project.\n\nAll implementation code, test code, sample code, code snippets, and proposed patches for this task must be written in Java and should target JDK 17.\n\n## Working Area\n\nUse this directory for the standalone algorithm implementation:\n\n```text\nworkspace/algorithm/\n```\n\nRecommended layout:\n\n```text\nworkspace/algorithm/src/main/java/TemporalDependencyRouter.java\nworkspace/algorithm/src/test/java/TemporalDependencyRouterTest.java\n```\n\nYou may run normal workspace commands if they help you complete the task, including Java/JDK commands or tests. Do not modify files outside this task directory.\n\n## Problem Statement\n\nA distributed platform contains `N` services connected by directed dependency calls. A dependency call from service `u` to service `v` is only available during specific time windows. Each available window has its own latency.\n\nEvery service also provides zero or more capabilities. A request may require a set of capabilities to have been encountered before it reaches the target service. Capabilities are accumulated from every visited service, including the source and target.\n\nFor each query, compute the earliest possible arrival time at the target service, starting at a given time, while satisfying the required capability set. If no valid route exists before the deadline, return `-1`.\n\n## Formal Definition\n\nThere are:\n\n- `N` services numbered `1..N`\n- `K` capability types numbered `0..K-1`\n- `M` directed temporal dependency edges\n- `Q` route queries\n\nEach service `i` has a capability bitmask `cap[i]`.\n\nEach directed edge has one or more availability windows. A window is:\n\n```text\nopenTime closeTime latency\n```\n\nYou may depart on that edge at time `t` if:\n\n```text\nopenTime <= t <= closeTime\n```\n\nIf you arrive at service `u` before `openTime`, you may wait until `openTime` and then take the edge. The arrival time at `v` is:\n\n```text\nmax(currentTime, openTime) + latency\n```\n\nThe edge cannot be used from that window if `currentTime > closeTime`.\n\nIf multiple windows exist for the same edge, choose the window that produces the earliest valid arrival.\n\nFor each query:\n\n```text\nsource target startTime deadline requiredCapabilityMask\n```\n\nA route is valid only if:\n\n```text\narrivalTime <= deadline\n(accumulatedCapabilities & requiredCapabilityMask) == requiredCapabilityMask\n```\n\nReturn the minimum valid arrival time, or `-1` if no such route exists.\n\n## Input Format\n\n```text\nN M K Q\ncap[1]\ncap[2]\n...\ncap[N]\n\nFor each of M edges:\nu v W\nopenTime_1 closeTime_1 latency_1\nopenTime_2 closeTime_2 latency_2\n...\nopenTime_W closeTime_W latency_W\n\nFor each of Q queries:\nsource target startTime deadline requiredCapabilityMask\n```\n\nAll masks are non-negative decimal integers.\n\n## Output Format\n\nPrint one line per query:\n\n```text\nearliestArrivalTime\n```\n\nor:\n\n```text\n-1\n```\n\n## Constraints\n\nThe implementation should be designed for large inputs:\n\n```text\n1 <= N <= 100000\n1 <= M <= 300000\n0 <= K <= 12\n1 <= Q <= 100000\n1 <= total number of edge windows <= 600000\n0 <= time values <= 1_000_000_000_000\n1 <= latency <= 1_000_000_000\n```\n\nImportant performance expectations:\n\n- Use `long` for time values.\n- Avoid recursion that can overflow the stack.\n- Avoid object-heavy per-state allocations in hot loops where practical.\n- Use fast input parsing.\n- Use priority-queue based search, interval lookup, and dominance pruning where appropriate.\n\n## Required Java API\n\nImplement a public class named:\n\n```java\npublic final class TemporalDependencyRouter\n```\n\nIt must support command-line execution from standard input/stdout:\n\n```java\npublic static void main(String[] args) throws Exception\n```\n\nYou may add helper classes inside the same file or package-private classes in additional Java files.\n\n## Sample Input\n\n```text\n4 4 3 3\n1\n2\n4\n0\n1 2 2\n0 10 5\n20 30 1\n2 4 1\n6 25 4\n1 3 1\n0 100 3\n3 4 1\n4 8 10\n1 4 0 20 3\n1 4 0 20 5\n1 4 11 40 3\n```\n\n## Sample Output\n\n```text\n10\n14\n25\n```\n\n## Sample Explanation\n\nQuery 1 requires capabilities `0` and `1`, mask `3`. Start at service `1` at time `0`, already collecting capability `0`. Take `1 -> 2` at time `0`, arrive at `5`, collect capability `1`, then wait until time `6` for `2 -> 4`, arriving at `10`.\n\nQuery 2 requires capabilities `0` and `2`, mask `5`. Take `1 -> 3`, arrive at `3`, collect capability `2`, then wait until time `4` for `3 -> 4`, arriving at `14`.\n\nQuery 3 starts at time `11`. The first `1 -> 2` window has expired, so wait for the second window at time `20`, arrive at service `2` at time `21`, then take `2 -> 4` and arrive at `25`.\n\n## Edge Cases To Consider\n\n- Source equals target\n- Required capabilities already satisfied at source\n- Waiting for a future edge window\n- Multiple windows per edge\n- Multiple edges between the same pair of services\n- Expired windows\n- Deadline exactly equal to arrival time\n- Capability mask `0`\n- Unreachable target\n- Routes that arrive earlier but with weaker capabilities versus later routes with stronger capabilities\n\n## Completion Requirements\n\nWhen finished, update `result.md` with:\n\n- final status\n- summary of work\n- files changed\n- approach and reasoning\n- algorithmic complexity\n- commands run and outcomes, if any\n- self-assessed rating if requested\n- token usage if available\n- notes or limitations\n",
+                "lineStart": 1,
+                "lineEnd": 222,
+                "totalLines": 222,
+                "truncated": false
+              }
+            },
+            "title": "models/CASSANDRA/01_algorithm/task_001/prompt.md",
+            "time": {
+              "start": 1784037789682,
+              "end": 1784037789717
+            }
+          },
+          "metadata": {
+            "anthropic": {
+              "caller": {
+                "type": "direct"
+              }
+            }
+          },
+          "id": "prt_f60f04fcc001oo5TtTzKCTECEz",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f03e94001dZSc5dTSoGUw9F"
+        },
+        {
+          "reason": "tool-calls",
+          "snapshot": "e70fa340354f30d2e6d6434916ef1c6864d75fb3",
+          "type": "step-finish",
+          "tokens": {
+            "total": 11236,
+            "input": 2,
+            "output": 106,
+            "reasoning": 0,
+            "cache": {
+              "write": 11128,
+              "read": 0
+            }
+          },
+          "cost": 0.07221,
+          "id": "prt_f60f0503b001wa35VxsXTatMLN",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f03e94001dZSc5dTSoGUw9F"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_f60f03e7d001YA0KGfsuY1lXaV",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "variant": "high",
+        "path": {
+          "cwd": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm",
+          "root": "/home/ubuntu/codingBenchmarks"
+        },
+        "cost": 0.10141775,
+        "tokens": {
+          "total": 17120,
+          "input": 2,
+          "output": 3115,
+          "reasoning": 0,
+          "cache": {
+            "write": 2875,
+            "read": 11128
+          }
+        },
+        "modelID": "claude-opus-4-8",
+        "providerID": "anthropic",
+        "time": {
+          "created": 1784037789794,
+          "completed": 1784037836956
+        },
+        "finish": "tool-calls",
+        "id": "msg_f60f05062001XIllh6q7Hl3p6O",
+        "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC"
+      },
+      "parts": [
+        {
+          "snapshot": "e70fa340354f30d2e6d6434916ef1c6864d75fb3",
+          "type": "step-start",
+          "id": "prt_f60f0553f001AJn06zAAUgdWwq",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f05062001XIllh6q7Hl3p6O"
+        },
+        {
+          "type": "reasoning",
+          "text": "I'm recognizing this as a temporal graph routing problem where I need to track both the current service node and accumulated capabilities as my state. Since K is at most 12, the capability bitmask can represent up to 4096 different states, though what matters for each query is the specific required capability mask. I'm planning to use Dijkstra's algorithm with states represented as (node, capMask) to find the earliest arrival time while ensuring I've accumulated all necessary capabilities.\n\nThe challenge is that with N nodes and up to 2^K capability states, the worst case could be computationally expensive across many queries. I'm considering a dominance pruning optimization where I only track capability bits relevant to the current query's required mask, which reduces the effective state space to (node, subset of required capabilities). This way, for each query, I'm only exploring states where the capability bits matter for that specific requirement.\n\nI'll implement a per-query Dijkstra using a HashMap to store the best arrival time for each (node, mask) pair, pruning states that are dominated by previously found solutions. When we reach a node with a superset of required capabilities at an earlier or equal time, we can skip exploring that state further.\n\nFor edge windows, I need to iterate through each available window and find the one that gives the earliest arrival time—taking the maximum of the current time and the window's open time, then adding the latency, as long as the current time doesn't exceed the window's close time. For simplicity I'll iterate through all windows per edge since the window count is typically small. I'm setting up the adjacency list using a compressed sparse row format where each node stores its outgoing edges, and each edge contains the target node plus arrays of opening times, closing times, and latencies for all its windows. Now I'll start implementing the solution, beginning with input parsing using a fast tokenizer to read the node count, edges, capacities, and queries.\n\nFor each query I need to track which capabilities have been accumulated so far, masked against the required set. If I'm already at the target with all required capabilities satisfied by my starting node's capacity, the answer is just the start time if it meets the deadline. Otherwise I need to explore paths that collect additional capabilities along the way.\n\nThe Dijkstra approach processes states in order of increasing time. When I pop a state at the target node where the accumulated capability mask equals the required mask, that's my answer since it's the earliest such arrival. If the time exceeds the deadline before finding any valid state, I can stop and return -1.\n\nFor relaxation, from each state I explore outgoing edges, computing the arrival time at the next node and updating the capability mask by collecting what's available there. I only push new states if they arrive by the deadline. To track visited states efficiently, I'm using a HashMap with a composite key combining the node and mask into a single long value, which keeps the lookup fast. I could add dominance pruning to skip states whose mask is a subset of an earlier state at the same node with better or equal time, though for now I'm keeping the core deduplication exact.\n\nThe window selection logic picks the earliest valid arrival across all open windows at a location—if I arrive before opening, I wait; if I arrive after closing, that window doesn't work. For K=0 the mask is always satisfied since there are no requirements. Time values stay within long range even with large path sums.\n\nNow I'm implementing the Java solution, setting up a priority queue to explore states ordered by arrival time. I'll use a compact representation storing time, node, and mask together to minimize allocations.\n\nWriting the heap implementation...",
+          "time": {
+            "start": 1784037791042,
+            "end": 1784037836349
+          },
+          "metadata": {
+            "anthropic": {
+              "signature": "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"
+            }
+          },
+          "id": "prt_f60f05542001R07Jn99F9Oy1dV",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f05062001XIllh6q7Hl3p6O"
+        },
+        {
+          "type": "tool",
+          "tool": "bash",
+          "callID": "toolu_01XxYmSAZT5R4VqizGKxmZTR",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "java -version 2>&1; echo \"---\"; ls -la /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm"
+            },
+            "output": "openjdk version \"17.0.19\" 2026-04-21\nOpenJDK Runtime Environment (build 17.0.19+10-1-22.04.2-Ubuntu)\nOpenJDK 64-Bit Server VM (build 17.0.19+10-1-22.04.2-Ubuntu, mixed mode, sharing)\n---\ntotal 12\ndrwxrwxr-x 2 ubuntu ubuntu 4096 Jul 14 20:55 .\ndrwxrwxr-x 3 ubuntu ubuntu 4096 Jul 14 20:55 ..\n-rw-rw-r-- 1 ubuntu ubuntu    1 Jul 14 20:55 .gitkeep\n",
+            "metadata": {
+              "output": "openjdk version \"17.0.19\" 2026-04-21\nOpenJDK Runtime Environment (build 17.0.19+10-1-22.04.2-Ubuntu)\nOpenJDK 64-Bit Server VM (build 17.0.19+10-1-22.04.2-Ubuntu, mixed mode, sharing)\n---\ntotal 12\ndrwxrwxr-x 2 ubuntu ubuntu 4096 Jul 14 20:55 .\ndrwxrwxr-x 3 ubuntu ubuntu 4096 Jul 14 20:55 ..\n-rw-rw-r-- 1 ubuntu ubuntu    1 Jul 14 20:55 .gitkeep\n",
+              "exit": 0,
+              "truncated": false
+            },
+            "title": "java -version 2>&1; echo \"---\"; ls -la /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm",
+            "time": {
+              "start": 1784037836884,
+              "end": 1784037836891
+            }
+          },
+          "metadata": {
+            "anthropic": {
+              "caller": {
+                "type": "direct"
+              }
+            }
+          },
+          "id": "prt_f60f10642001OC9WiYY1KHDSUp",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f05062001XIllh6q7Hl3p6O"
+        },
+        {
+          "reason": "tool-calls",
+          "snapshot": "e70fa340354f30d2e6d6434916ef1c6864d75fb3",
+          "type": "step-finish",
+          "tokens": {
+            "total": 17120,
+            "input": 2,
+            "output": 3115,
+            "reasoning": 0,
+            "cache": {
+              "write": 2875,
+              "read": 11128
+            }
+          },
+          "cost": 0.10141775,
+          "id": "prt_f60f1087e001yf6aMrgNkmD6yB",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f05062001XIllh6q7Hl3p6O"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_f60f03e7d001YA0KGfsuY1lXaV",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "variant": "high",
+        "path": {
+          "cwd": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm",
+          "root": "/home/ubuntu/codingBenchmarks"
+        },
+        "cost": 0.03315525,
+        "tokens": {
+          "total": 17570,
+          "input": 2,
+          "output": 206,
+          "reasoning": 0,
+          "cache": {
+            "write": 3359,
+            "read": 14003
+          }
+        },
+        "modelID": "claude-opus-4-8",
+        "providerID": "anthropic",
+        "time": {
+          "created": 1784037836962,
+          "completed": 1784037840241
+        },
+        "finish": "tool-calls",
+        "id": "msg_f60f108a1001MAfItiJT15ddPz",
+        "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC"
+      },
+      "parts": [
+        {
+          "snapshot": "e70fa340354f30d2e6d6434916ef1c6864d75fb3",
+          "type": "step-start",
+          "id": "prt_f60f10c5c001q7TlazKWTEtvqQ",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f108a1001MAfItiJT15ddPz"
+        },
+        {
+          "type": "reasoning",
+          "text": "I'll start by setting up the workspace and organizing my approach with a task list.",
+          "time": {
+            "start": 1784037837918,
+            "end": 1784037839129
+          },
+          "metadata": {
+            "anthropic": {
+              "signature": "Eq0CCokBCA8YAipAzyV3vFjR2YCmKT6LKXRHI8VOGHKolHQGHGlt1VAOWcKCwh7Y6heT35LbnaG8UqM4b3KGPmfjwp3JiZ9hgWVIADIPY2xhdWRlLW9wdXMtNC04OABCCHRoaW5raW5nWiQ3YzIzYjYxZS02YzYwLTQ4ZDAtODU1YS01NzZiN2RhZDcxMmQSDD7O2uXK0sOgzoxIjBoMQqjdT3Y6lS0rgFS8IjCH4MDx8gPhWRjdD7p4akKfbsr7EQOuCbQU+pbigu2VpZZGITeNFZCxSsiqJZHNs5EqUahCI2rRN96MtxoMek3mYdt0jAYhmPpfFenMUogWJ6M5zk1OGPtS7jTCOLxBtrOIj57OM6Ebzf8Y12wdbY298JMZ9ISbo0QpMnwx05M8mv8EqxgB"
+            }
+          },
+          "id": "prt_f60f10c5e001mm7BCaDCCDT8jd",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f108a1001MAfItiJT15ddPz"
+        },
+        {
+          "type": "tool",
+          "tool": "todowrite",
+          "callID": "toolu_01KUvT8ENMMXtVtaWfrwg8rR",
+          "state": {
+            "status": "completed",
+            "input": {
+              "todos": [
+                {
+                  "content": "Implement TemporalDependencyRouter.java",
+                  "status": "in_progress",
+                  "priority": "high"
+                },
+                {
+                  "content": "Write JUnit-style/main-based test with sample",
+                  "status": "pending",
+                  "priority": "high"
+                },
+                {
+                  "content": "Compile and run against sample + edge cases",
+                  "status": "pending",
+                  "priority": "high"
+                },
+                {
+                  "content": "Write result.md report",
+                  "status": "pending",
+                  "priority": "medium"
+                }
+              ]
+            },
+            "output": "[\n  {\n    \"content\": \"Implement TemporalDependencyRouter.java\",\n    \"status\": \"in_progress\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Write JUnit-style/main-based test with sample\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Compile and run against sample + edge cases\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Write result.md report\",\n    \"status\": \"pending\",\n    \"priority\": \"medium\"\n  }\n]",
+            "metadata": {
+              "todos": [
+                {
+                  "content": "Implement TemporalDependencyRouter.java",
+                  "status": "in_progress",
+                  "priority": "high"
+                },
+                {
+                  "content": "Write JUnit-style/main-based test with sample",
+                  "status": "pending",
+                  "priority": "high"
+                },
+                {
+                  "content": "Compile and run against sample + edge cases",
+                  "status": "pending",
+                  "priority": "high"
+                },
+                {
+                  "content": "Write result.md report",
+                  "status": "pending",
+                  "priority": "medium"
+                }
+              ],
+              "truncated": false
+            },
+            "title": "4 todos",
+            "time": {
+              "start": 1784037840193,
+              "end": 1784037840198
+            }
+          },
+          "metadata": {
+            "anthropic": {
+              "caller": {
+                "type": "direct"
+              }
+            }
+          },
+          "id": "prt_f60f1111d001pymnMGpP6L7Lnp",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f108a1001MAfItiJT15ddPz"
+        },
+        {
+          "reason": "tool-calls",
+          "snapshot": "e70fa340354f30d2e6d6434916ef1c6864d75fb3",
+          "type": "step-finish",
+          "tokens": {
+            "total": 17570,
+            "input": 2,
+            "output": 206,
+            "reasoning": 0,
+            "cache": {
+              "write": 3359,
+              "read": 14003
+            }
+          },
+          "cost": 0.03315525,
+          "id": "prt_f60f11556001zL0KnksVIXAASw",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f108a1001MAfItiJT15ddPz"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_f60f03e7d001YA0KGfsuY1lXaV",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "variant": "high",
+        "path": {
+          "cwd": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm",
+          "root": "/home/ubuntu/codingBenchmarks"
+        },
+        "cost": 0.16310975,
+        "tokens": {
+          "total": 23843,
+          "input": 2,
+          "output": 6076,
+          "reasoning": 0,
+          "cache": {
+            "write": 403,
+            "read": 17362
+          }
+        },
+        "modelID": "claude-opus-4-8",
+        "providerID": "anthropic",
+        "time": {
+          "created": 1784037840245,
+          "completed": 1784037910066
+        },
+        "finish": "tool-calls",
+        "id": "msg_f60f115750016mRYQE6pb7kgle",
+        "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC"
+      },
+      "parts": [
+        {
+          "snapshot": "e70fa340354f30d2e6d6434916ef1c6864d75fb3",
+          "type": "step-start",
+          "id": "prt_f60f135a4001HSnrwcu39jrz7v",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f115750016mRYQE6pb7kgle"
+        },
+        {
+          "type": "reasoning",
+          "text": "Now I'm ready to start building out the main implementation.",
+          "time": {
+            "start": 1784037848487,
+            "end": 1784037852290
+          },
+          "metadata": {
+            "anthropic": {
+              "signature": "EpUCCokBCA8YAipAZvTfTA5OScXAYVD0SKD99jnR3JnRuAcPrghrSLJ+0dJbcDwuv9TPS4tZ8jscVinPu77bhuBMAR33AVHBaJNu2zIPY2xhdWRlLW9wdXMtNC04OABCCHRoaW5raW5nWiQ3YzIzYjYxZS02YzYwLTQ4ZDAtODU1YS01NzZiN2RhZDcxMmQSDKcZrI1/VlNIdcWrPhoMNZa2Gs46+W7JwmutIjCbb+qq309FpYJcyEvO2VW6alcU8W/6zGfOWsYVXjMGzYc1shyZ+EFk4MwWtkNUzYYqOUFM7oXN5RYsJw7/h1OL0eoJ2Gk5dIf1ip2gG+Jex7o0djTi2j/jg0KCOsTC9i8NIWoKZ+czMdXoMhgB"
+            }
+          },
+          "id": "prt_f60f135a7001hwDhqZGuVjbhMJ",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f115750016mRYQE6pb7kgle"
+        },
+        {
+          "type": "tool",
+          "tool": "write",
+          "callID": "toolu_01Gb6ctV6mkEn7NnrBdf19jy",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/main/java/TemporalDependencyRouter.java",
+              "content": "import java.io.DataInputStream;\nimport java.io.IOException;\nimport java.io.InputStream;\nimport java.io.OutputStream;\n\n/**\n * Temporal Dependency Router.\n *\n * <p>Solves earliest-arrival routing over a directed temporal graph whose edges are only usable\n * during specific time windows, subject to a required set of capabilities that must be accumulated\n * along the traversed route (including the source and target services).\n *\n * <p>Search strategy: per-query time-ordered (Dijkstra-like) label-setting search over states\n * {@code (node, capabilityMask)}. Because only the bits present in a query's required mask can ever\n * matter, capability masks are projected onto the required mask, which collapses the state space to\n * {@code node x 2^popcount(requiredMask)}. Exact-state deduplication plus superset-dominance pruning\n * eliminate redundant labels: a label is discarded if the same node already holds a label whose mask\n * is a superset and whose arrival time is no later.\n *\n * <p>All time arithmetic uses {@code long}. Input parsing is done with a hand-rolled byte reader,\n * adjacency is stored in CSR form, and the frontier uses a manual binary heap over primitive arrays\n * to avoid per-state object allocation in the hot loop.\n */\npublic final class TemporalDependencyRouter {\n\n    private TemporalDependencyRouter() {\n    }\n\n    public static void main(String[] args) throws Exception {\n        FastReader in = new FastReader(System.in);\n        StringBuilder sb = new StringBuilder();\n        Solver solver = Solver.read(in);\n        int q = solver.q;\n        for (int i = 0; i < q; i++) {\n            int source = (int) in.nextLong();\n            int target = (int) in.nextLong();\n            long startTime = in.nextLong();\n            long deadline = in.nextLong();\n            int requiredMask = (int) in.nextLong();\n            long ans = solver.query(source, target, startTime, deadline, requiredMask);\n            sb.append(ans).append('\\n');\n        }\n        OutputStream out = System.out;\n        out.write(sb.toString().getBytes());\n        out.flush();\n    }\n\n    /**\n     * Immutable graph container plus per-query search. Reusable scratch buffers are held on the\n     * instance and reset lazily per query using a generation stamp so repeated queries avoid\n     * re-zeroing large arrays.\n     */\n    static final class Solver {\n        final int n;\n        final int m;\n        final int k;\n        final int q;\n        final int[] cap; // cap[node], 1-indexed\n\n        // CSR adjacency over edges\n        final int[] head;      // head[node] .. head[node+1] index range into edge arrays\n        final int[] edgeTo;    // edgeTo[e]\n        final int[] winStart;  // window range per edge into window arrays\n        final int[] winEnd;\n        final long[] wOpen;\n        final long[] wClose;\n        final long[] wLat;\n\n        // Per-query dominance table. For a given node we store labels as (mask,time) pairs.\n        // Indexed by node in CSR-like fashion but sized dynamically per query using hashing-free\n        // small arrays because the number of distinct masks per node is <= 2^popcount(R).\n        Solver(int n, int m, int k, int q, int[] cap, int[] head, int[] edgeTo,\n               int[] winStart, int[] winEnd, long[] wOpen, long[] wClose, long[] wLat) {\n            this.n = n;\n            this.m = m;\n            this.k = k;\n            this.q = q;\n            this.cap = cap;\n            this.head = head;\n            this.edgeTo = edgeTo;\n            this.winStart = winStart;\n            this.winEnd = winEnd;\n            this.wOpen = wOpen;\n            this.wClose = wClose;\n            this.wLat = wLat;\n        }\n\n        static Solver read(FastReader in) throws IOException {\n            int n = (int) in.nextLong();\n            int m = (int) in.nextLong();\n            int k = (int) in.nextLong();\n            int q = (int) in.nextLong();\n\n            int[] cap = new int[n + 1];\n            for (int i = 1; i <= n; i++) {\n                cap[i] = (int) in.nextLong();\n            }\n\n            int[] edgeToTmp = new int[m];\n            int[] edgeFrom = new int[m];\n            int[] winStart = new int[m];\n            int[] winEnd = new int[m];\n\n            // first pass: read edges and windows into growable arrays\n            long[] wOpen = new long[Math.max(1, m)];\n            long[] wClose = new long[Math.max(1, m)];\n            long[] wLat = new long[Math.max(1, m)];\n            int wCount = 0;\n\n            int[] degree = new int[n + 2];\n\n            for (int e = 0; e < m; e++) {\n                int u = (int) in.nextLong();\n                int v = (int) in.nextLong();\n                int w = (int) in.nextLong();\n                edgeFrom[e] = u;\n                edgeToTmp[e] = v;\n                degree[u]++;\n                winStart[e] = wCount;\n                if (wCount + w > wOpen.length) {\n                    int newCap = Math.max(wOpen.length * 2, wCount + w);\n                    wOpen = grow(wOpen, newCap);\n                    wClose = grow(wClose, newCap);\n                    wLat = grow(wLat, newCap);\n                }\n                for (int j = 0; j < w; j++) {\n                    wOpen[wCount] = in.nextLong();\n                    wClose[wCount] = in.nextLong();\n                    wLat[wCount] = in.nextLong();\n                    wCount++;\n                }\n                winEnd[e] = wCount;\n            }\n\n            // Build CSR ordering of edges by source node.\n            int[] head = new int[n + 2];\n            for (int i = 1; i <= n; i++) {\n                head[i + 1] = head[i] + degree[i];\n            }\n            // head[node] gives start; use a cursor copy\n            int[] cursor = new int[n + 2];\n            System.arraycopy(head, 0, cursor, 0, n + 2);\n            // shift: head[node] should be prefix sum starting index for node\n            // Recompute properly: head[1]=0, head[node]=head[node-1]+degree[node-1]\n            head[1] = 0;\n            for (int i = 2; i <= n + 1; i++) {\n                head[i] = head[i - 1] + degree[i - 1];\n            }\n            System.arraycopy(head, 0, cursor, 0, n + 2);\n\n            int[] edgeTo = new int[m];\n            int[] winStartCsr = new int[m];\n            int[] winEndCsr = new int[m];\n            for (int e = 0; e < m; e++) {\n                int u = edgeFrom[e];\n                int pos = cursor[u]++;\n                edgeTo[pos] = edgeToTmp[e];\n                winStartCsr[pos] = winStart[e];\n                winEndCsr[pos] = winEnd[e];\n            }\n\n            return new Solver(n, m, k, q, cap, head, edgeTo, winStartCsr, winEndCsr,\n                    wOpen, wClose, wLat);\n        }\n\n        private static long[] grow(long[] a, int newLen) {\n            long[] b = new long[newLen];\n            System.arraycopy(a, 0, b, 0, a.length);\n            return b;\n        }\n\n        // ---- Per-query state ----\n        // Manual binary heap over (time, packedState) where packedState = node*maskCount + mask.\n        private long[] heapTime = new long[16];\n        private long[] heapState = new long[16];\n        private int heapSize = 0;\n\n        // Dominance labels per node: for each node a small list of (mask,time).\n        // Stored via generation-stamped arrays to allow O(1) reset between queries.\n        private long[][] nodeMasks = null; // lazily grown per node\n        private long[][] nodeTimes = null;\n        private int[] nodeCount = null;\n        private int[] nodeGen = null;\n        private int gen = 0;\n\n        private void ensureQueryBuffers() {\n            if (nodeMasks == null) {\n                nodeMasks = new long[n + 1][];\n                nodeTimes = new long[n + 1][];\n                nodeCount = new int[n + 1];\n                nodeGen = new int[n + 1];\n            }\n        }\n\n        long query(int source, int target, long startTime, long deadline, int requiredMask) {\n            ensureQueryBuffers();\n            gen++;\n            heapSize = 0;\n\n            // Project everything onto requiredMask bits only.\n            int startMask = cap[source] & requiredMask;\n\n            if (startTime > deadline) {\n                // Even the source cannot be \"arrived at\" within the deadline in a meaningful sense;\n                // but source is reached at startTime. If startTime>deadline no route can be valid.\n                return -1L;\n            }\n\n            pushLabel(source, startMask, startTime, requiredMask);\n\n            while (heapSize > 0) {\n                long t = heapTime[0];\n                long packed = heapState[0];\n                popTop();\n\n                if (t > deadline) {\n                    // All remaining labels have time >= t > deadline.\n                    return -1L;\n                }\n\n                int maskCount = requiredMask + 1; // masks range 0..requiredMask, but only subsets valid\n                int node = (int) (packed / maskCount);\n                int mask = (int) (packed % maskCount);\n\n                // Stale check: if a dominating label now exists, skip.\n                if (isStale(node, mask, t)) {\n                    continue;\n                }\n\n                if (node == target && mask == requiredMask) {\n                    return t;\n                }\n\n                // Relax outgoing edges.\n                int hs = head[node];\n                int he = head[node + 1];\n                for (int e = hs; e < he; e++) {\n                    int v = edgeTo[e];\n                    long arrival = bestArrival(e, t);\n                    if (arrival < 0 || arrival > deadline) {\n                        continue;\n                    }\n                    int newMask = mask | (cap[v] & requiredMask);\n                    pushLabel(v, newMask, arrival, requiredMask);\n                }\n            }\n            return -1L;\n        }\n\n        /**\n         * Earliest arrival over all windows of edge index {@code e} given current time {@code t},\n         * or -1 if the edge cannot be used.\n         */\n        private long bestArrival(int e, long t) {\n            int s = winStart[e];\n            int en = winEnd[e];\n            long best = -1L;\n            for (int w = s; w < en; w++) {\n                long close = wClose[w];\n                if (t > close) {\n                    continue; // window expired for this current time\n                }\n                long open = wOpen[w];\n                long depart = t > open ? t : open; // max(t, open)\n                long arr = depart + wLat[w];\n                if (best < 0 || arr < best) {\n                    best = arr;\n                }\n            }\n            return best;\n        }\n\n        /**\n         * Attempt to register a label (node, mask, time). Returns after inserting into the heap if it\n         * is not dominated by an existing label. A label is dominated when the node already holds a\n         * label with a superset mask and a time no greater than this one.\n         */\n        private void pushLabel(int node, int mask, long time, int requiredMask) {\n            if (nodeGen[node] != gen) {\n                nodeGen[node] = gen;\n                nodeCount[node] = 0;\n                if (nodeMasks[node] == null) {\n                    nodeMasks[node] = new long[4];\n                    nodeTimes[node] = new long[4];\n                }\n            }\n            long[] masks = nodeMasks[node];\n            long[] times = nodeTimes[node];\n            int cnt = nodeCount[node];\n\n            // Dominance check + prune labels this new one dominates.\n            for (int i = 0; i < cnt; i++) {\n                int em = (int) masks[i];\n                long et = times[i];\n                // existing dominates new: existing mask superset of new AND existing time <= new time\n                if ((em & mask) == mask && et <= time) {\n                    return;\n                }\n            }\n            // Insert; also drop any existing labels dominated by the new one to keep list small.\n            int write = 0;\n            for (int i = 0; i < cnt; i++) {\n                int em = (int) masks[i];\n                long et = times[i];\n                boolean dominatedByNew = (mask & em) == em && time <= et;\n                if (!dominatedByNew) {\n                    masks[write] = em;\n                    times[write] = et;\n                    write++;\n                }\n            }\n            cnt = write;\n            if (cnt == masks.length) {\n                int nl = masks.length * 2;\n                long[] nm = new long[nl];\n                long[] nt = new long[nl];\n                System.arraycopy(masks, 0, nm, 0, cnt);\n                System.arraycopy(times, 0, nt, 0, cnt);\n                nodeMasks[node] = nm;\n                nodeTimes[node] = nt;\n                masks = nm;\n                times = nt;\n            }\n            masks[cnt] = mask;\n            times[cnt] = time;\n            nodeCount[node] = cnt + 1;\n\n            int maskCount = requiredMask + 1;\n            long packed = (long) node * maskCount + mask;\n            heapPush(time, packed);\n        }\n\n        /** A popped label is stale if no stored label for that node matches (mask,time) exactly\n         *  as the best, i.e. a dominating label with strictly better standing now exists. */\n        private boolean isStale(int node, int mask, long time) {\n            if (nodeGen[node] != gen) {\n                return true;\n            }\n            long[] masks = nodeMasks[node];\n            long[] times = nodeTimes[node];\n            int cnt = nodeCount[node];\n            for (int i = 0; i < cnt; i++) {\n                int em = (int) masks[i];\n                long et = times[i];\n                if ((em & mask) == mask && et <= time) {\n                    // dominating (or equal) label exists; this popped label is only fresh if it IS\n                    // that label (same mask and same time).\n                    if (em == mask && et == time) {\n                        return false;\n                    }\n                    return true;\n                }\n            }\n            return true;\n        }\n\n        // ---- manual binary heap keyed by time ----\n        private void heapPush(long time, long packed) {\n            if (heapSize == heapTime.length) {\n                int nl = heapTime.length * 2;\n                long[] nt = new long[nl];\n                long[] ns = new long[nl];\n                System.arraycopy(heapTime, 0, nt, 0, heapSize);\n                System.arraycopy(heapState, 0, ns, 0, heapSize);\n                heapTime = nt;\n                heapState = ns;\n            }\n            int i = heapSize++;\n            heapTime[i] = time;\n            heapState[i] = packed;\n            while (i > 0) {\n                int parent = (i - 1) >>> 1;\n                if (heapTime[parent] <= heapTime[i]) {\n                    break;\n                }\n                swap(parent, i);\n                i = parent;\n            }\n        }\n\n        private void popTop() {\n            heapSize--;\n            if (heapSize > 0) {\n                heapTime[0] = heapTime[heapSize];\n                heapState[0] = heapState[heapSize];\n                int i = 0;\n                while (true) {\n                    int l = 2 * i + 1;\n                    int r = 2 * i + 2;\n                    int smallest = i;\n                    if (l < heapSize && heapTime[l] < heapTime[smallest]) {\n                        smallest = l;\n                    }\n                    if (r < heapSize && heapTime[r] < heapTime[smallest]) {\n                        smallest = r;\n                    }\n                    if (smallest == i) {\n                        break;\n                    }\n                    swap(smallest, i);\n                    i = smallest;\n                }\n            }\n        }\n\n        private void swap(int a, int b) {\n            long t = heapTime[a];\n            heapTime[a] = heapTime[b];\n            heapTime[b] = t;\n            long s = heapState[a];\n            heapState[a] = heapState[b];\n            heapState[b] = s;\n        }\n    }\n\n    /** Minimal fast reader for signed decimal longs from a byte stream. */\n    static final class FastReader {\n        private final DataInputStream din;\n        private final byte[] buffer = new byte[1 << 16];\n        private int bufferPointer = 0;\n        private int bytesRead = 0;\n\n        FastReader(InputStream in) {\n            din = new DataInputStream(in);\n        }\n\n        long nextLong() throws IOException {\n            int b = read();\n            while (b != -1 && b != '-' && (b < '0' || b > '9')) {\n                b = read();\n            }\n            if (b == -1) {\n                throw new IOException(\"Unexpected EOF while reading number\");\n            }\n            boolean neg = false;\n            if (b == '-') {\n                neg = true;\n                b = read();\n            }\n            long ret = 0;\n            while (b >= '0' && b <= '9') {\n                ret = ret * 10 + (b - '0');\n                b = read();\n            }\n            return neg ? -ret : ret;\n        }\n\n        private int read() throws IOException {\n            if (bufferPointer == bytesRead) {\n                fillBuffer();\n                if (bytesRead == -1) {\n                    return -1;\n                }\n            }\n            return buffer[bufferPointer++];\n        }\n\n        private void fillBuffer() throws IOException {\n            bytesRead = din.read(buffer, 0, buffer.length);\n            bufferPointer = 0;\n        }\n    }\n}\n"
+            },
+            "output": "Wrote file successfully.",
+            "metadata": {
+              "diagnostics": {},
+              "filepath": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/main/java/TemporalDependencyRouter.java",
+              "exists": false,
+              "truncated": false
+            },
+            "title": "models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/main/java/TemporalDependencyRouter.java",
+            "time": {
+              "start": 1784037909562,
+              "end": 1784037909577
+            }
+          },
+          "metadata": {
+            "anthropic": {
+              "caller": {
+                "type": "direct"
+              }
+            }
+          },
+          "id": "prt_f60f14514001Gqgy9Zm2B1DFze",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f115750016mRYQE6pb7kgle"
+        },
+        {
+          "reason": "tool-calls",
+          "snapshot": "8c06d8efdd8b15edfd5436b64abbea1c533b9228",
+          "type": "step-finish",
+          "tokens": {
+            "total": 23843,
+            "input": 2,
+            "output": 6076,
+            "reasoning": 0,
+            "cache": {
+              "write": 403,
+              "read": 17362
+            }
+          },
+          "cost": 0.16310975,
+          "id": "prt_f60f22610001Ctr40hk4fdZESv",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f115750016mRYQE6pb7kgle"
+        },
+        {
+          "type": "patch",
+          "hash": "e70fa340354f30d2e6d6434916ef1c6864d75fb3",
+          "files": [
+            "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/main/java/TemporalDependencyRouter.java"
+          ],
+          "id": "prt_f60f2262e001LQO2QXg0o8OiCM",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f115750016mRYQE6pb7kgle"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_f60f03e7d001YA0KGfsuY1lXaV",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "variant": "high",
+        "path": {
+          "cwd": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm",
+          "root": "/home/ubuntu/codingBenchmarks"
+        },
+        "cost": 0.141155,
+        "tokens": {
+          "total": 27625,
+          "input": 2,
+          "output": 3768,
+          "reasoning": 0,
+          "cache": {
+            "write": 6090,
+            "read": 17765
+          }
+        },
+        "modelID": "claude-opus-4-8",
+        "providerID": "anthropic",
+        "time": {
+          "created": 1784037910071,
+          "completed": 1784037958332
+        },
+        "finish": "tool-calls",
+        "id": "msg_f60f22637001fyCOrKV2k3Nmun",
+        "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC"
+      },
+      "parts": [
+        {
+          "snapshot": "8c06d8efdd8b15edfd5436b64abbea1c533b9228",
+          "type": "step-start",
+          "id": "prt_f60f23850001lz8pIpqFti08x0",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f22637001fyCOrKV2k3Nmun"
+        },
+        {
+          "type": "reasoning",
+          "text": "I'm checking the packing logic for the node and mask values—with node up to 100,000 and maskCount up to 4,096, the product fits comfortably in a long. The key thing is that maskCount must be consistent between push and pop operations, and since both use requiredMask+1 within the same query, that's handled correctly. When requiredMask is 0, maskCount becomes 1, which works fine for the packing calculation.\n\nFor the dominance and staleness logic, I'm verifying that when we pop a label and process it, the label stays in the node's list but won't be processed twice because each unique (node, mask, time) combination is handled only once.\n\nNow I'm reviewing the CSR construction logic. I compute node degrees, then build the head array using prefix sums — initially setting head[i+1] = head[i] + degree[i] for i from 1 to n, which correctly computes the prefix. Then I'm recalculating this with a cursor copy and resetting head[1] to 0 before looping through i from 2 to n+1 to recompute the prefix sums.\n\nIt's redundant but functionally correct, so I'll leave it as is. Now I need to write the test file with stdin redirection and handle edge cases.",
+          "time": {
+            "start": 1784037914706,
+            "end": 1784037934773
+          },
+          "metadata": {
+            "anthropic": {
+              "signature": "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"
+            }
+          },
+          "id": "prt_f60f23852001qqYNf5MP6DnodZ",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f22637001fyCOrKV2k3Nmun"
+        },
+        {
+          "type": "tool",
+          "tool": "write",
+          "callID": "toolu_01UPfvhSiN8ea5BsgsjCPex9",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java",
+              "content": "import java.io.ByteArrayInputStream;\nimport java.io.ByteArrayOutputStream;\nimport java.io.InputStream;\nimport java.io.PrintStream;\n\n/**\n * Standalone test harness (no external test framework) for {@link TemporalDependencyRouter}.\n *\n * <p>Each case feeds an input document to the router's {@code main} via a redirected\n * {@code System.in}/{@code System.out} and compares the produced stdout to an expected value.\n * Exit code is non-zero if any case fails.\n */\npublic final class TemporalDependencyRouterTest {\n\n    private static int failures = 0;\n    private static int total = 0;\n\n    public static void main(String[] args) throws Exception {\n        // Sample from the problem statement.\n        run(\"sample\",\n                \"4 4 3 3\\n\" +\n                \"1\\n2\\n4\\n0\\n\" +\n                \"1 2 2\\n0 10 5\\n20 30 1\\n\" +\n                \"2 4 1\\n6 25 4\\n\" +\n                \"1 3 1\\n0 100 3\\n\" +\n                \"3 4 1\\n4 8 10\\n\" +\n                \"1 4 0 20 3\\n\" +\n                \"1 4 0 20 5\\n\" +\n                \"1 4 11 40 3\\n\",\n                \"10\\n14\\n25\\n\");\n\n        // Source equals target, capabilities already satisfied at source.\n        run(\"source_equals_target_satisfied\",\n                \"2 1 2 1\\n\" +\n                \"3\\n0\\n\" +\n                \"1 2 1\\n0 100 5\\n\" +\n                \"1 1 7 50 3\\n\",\n                \"7\\n\");\n\n        // Source equals target but capabilities NOT satisfied -> must leave and return.\n        // Node1 cap=1(bit0), node2 cap=2(bit1). Need mask 3 at node1.\n        // 1->2 window [0,100] lat 5, 2->1 window [0,100] lat 5. Start t=0.\n        // Route: 1(t0,mask1) ->2(t5,mask3) ->1(t10,mask3). Answer 10.\n        run(\"source_equals_target_needs_roundtrip\",\n                \"2 2 2 1\\n\" +\n                \"1\\n2\\n\" +\n                \"1 2 1\\n0 100 5\\n\" +\n                \"2 1 1\\n0 100 5\\n\" +\n                \"1 1 0 50 3\\n\",\n                \"10\\n\");\n\n        // Capability mask 0: only earliest arrival matters.\n        run(\"mask_zero\",\n                \"3 2 2 1\\n\" +\n                \"0\\n0\\n0\\n\" +\n                \"1 2 1\\n0 100 2\\n\" +\n                \"2 3 1\\n0 100 3\\n\" +\n                \"1 3 0 100 0\\n\",\n                \"5\\n\");\n\n        // Unreachable target.\n        run(\"unreachable\",\n                \"3 1 1 1\\n\" +\n                \"1\\n0\\n0\\n\" +\n                \"1 2 1\\n0 100 2\\n\" +\n                \"1 3 0 100 0\\n\",\n                \"-1\\n\");\n\n        // Deadline exactly equal to arrival time (should succeed).\n        run(\"deadline_exact\",\n                \"2 1 1 1\\n\" +\n                \"1\\n0\\n\" +\n                \"1 2 1\\n0 100 5\\n\" +\n                \"1 2 0 5 0\\n\",\n                \"5\\n\");\n\n        // Deadline one less than arrival (should fail).\n        run(\"deadline_miss\",\n                \"2 1 1 1\\n\" +\n                \"1\\n0\\n\" +\n                \"1 2 1\\n0 100 5\\n\" +\n                \"1 2 0 4 0\\n\",\n                \"-1\\n\");\n\n        // Expired window forces waiting on a later window (query 3 style).\n        run(\"expired_then_later_window\",\n                \"2 1 0 1\\n\" +\n                \"0\\n0\\n\" +\n                \"1 2 2\\n0 5 1\\n20 30 2\\n\" +\n                \"1 2 11 40 0\\n\",\n                \"22\\n\");\n\n        // Weaker-early vs stronger-late tradeoff.\n        // Need mask 2 (bit1) at target node3.\n        // Path A: 1->3 direct arrives early but never collects bit1 (node3 cap=0) => invalid.\n        // Path B: 1->2 (collect bit1) ->3 arrives later but valid.\n        run(\"weak_early_vs_strong_late\",\n                \"3 3 2 1\\n\" +\n                \"0\\n2\\n0\\n\" +\n                \"1 3 1\\n0 100 1\\n\" +\n                \"1 2 1\\n0 100 3\\n\" +\n                \"2 3 1\\n0 100 3\\n\" +\n                \"1 3 0 100 2\\n\",\n                \"6\\n\");\n\n        // Multiple windows: choose the one giving earliest valid arrival.\n        run(\"multi_window_choose_best\",\n                \"2 1 0 1\\n\" +\n                \"0\\n0\\n\" +\n                \"1 2 3\\n0 100 50\\n0 100 40\\n10 100 5\\n\" +\n                \"1 2 0 100 0\\n\",\n                \"5\\n\");\n\n        // startTime after deadline -> -1.\n        run(\"start_after_deadline\",\n                \"2 1 0 1\\n\" +\n                \"0\\n0\\n\" +\n                \"1 2 1\\n0 100 1\\n\" +\n                \"1 2 50 40 0\\n\",\n                \"-1\\n\");\n\n        // Parallel edges between same pair with different windows/latency.\n        run(\"parallel_edges\",\n                \"2 2 0 1\\n\" +\n                \"0\\n0\\n\" +\n                \"1 2 1\\n0 100 20\\n\" +\n                \"1 2 1\\n0 100 7\\n\" +\n                \"1 2 0 100 0\\n\",\n                \"7\\n\");\n\n        System.out.println(\"\\n\" + (total - failures) + \"/\" + total + \" tests passed.\");\n        if (failures > 0) {\n            System.exit(1);\n        }\n    }\n\n    private static void run(String name, String input, String expected) throws Exception {\n        total++;\n        InputStream oldIn = System.in;\n        PrintStream oldOut = System.out;\n        ByteArrayOutputStream bos = new ByteArrayOutputStream();\n        try {\n            System.setIn(new ByteArrayInputStream(input.getBytes()));\n            System.setOut(new PrintStream(bos));\n            TemporalDependencyRouter.main(new String[0]);\n        } finally {\n            System.setIn(oldIn);\n            System.setOut(oldOut);\n        }\n        String actual = bos.toString();\n        if (actual.equals(expected)) {\n            System.out.println(\"PASS  \" + name);\n        } else {\n            failures++;\n            System.out.println(\"FAIL  \" + name\n                    + \"\\n  expected: \" + expected.replace(\"\\n\", \"\\\\n\")\n                    + \"\\n  actual:   \" + actual.replace(\"\\n\", \"\\\\n\"));\n        }\n    }\n}\n"
+            },
+            "output": "Wrote file successfully.",
+            "metadata": {
+              "diagnostics": {},
+              "filepath": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java",
+              "exists": false,
+              "truncated": false
+            },
+            "title": "models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java",
+            "time": {
+              "start": 1784037958211,
+              "end": 1784037958221
+            }
+          },
+          "metadata": {
+            "anthropic": {
+              "caller": {
+                "type": "direct"
+              }
+            }
+          },
+          "id": "prt_f60f286b9001LWRax37bjr0TeT",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f22637001fyCOrKV2k3Nmun"
+        },
+        {
+          "reason": "tool-calls",
+          "snapshot": "86e8bdb43635ab9e9fd7546838aa03a443ae671b",
+          "type": "step-finish",
+          "tokens": {
+            "total": 27625,
+            "input": 2,
+            "output": 3768,
+            "reasoning": 0,
+            "cache": {
+              "write": 6090,
+              "read": 17765
+            }
+          },
+          "cost": 0.141155,
+          "id": "prt_f60f2e293001Ef0pXrBiYYKm2T",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f22637001fyCOrKV2k3Nmun"
+        },
+        {
+          "type": "patch",
+          "hash": "8c06d8efdd8b15edfd5436b64abbea1c533b9228",
+          "files": [
+            "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java"
+          ],
+          "id": "prt_f60f2e2b9001mZYw4VupTH9v8q",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f22637001fyCOrKV2k3Nmun"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_f60f03e7d001YA0KGfsuY1lXaV",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "variant": "high",
+        "path": {
+          "cwd": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm",
+          "root": "/home/ubuntu/codingBenchmarks"
+        },
+        "cost": 0.03975,
+        "tokens": {
+          "total": 27806,
+          "input": 2,
+          "output": 167,
+          "reasoning": 0,
+          "cache": {
+            "write": 3782,
+            "read": 23855
+          }
+        },
+        "modelID": "claude-opus-4-8",
+        "providerID": "anthropic",
+        "time": {
+          "created": 1784037958337,
+          "completed": 1784037973374
+        },
+        "finish": "tool-calls",
+        "id": "msg_f60f2e2c00016a9mJV0aOPJ1ge",
+        "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC"
+      },
+      "parts": [
+        {
+          "snapshot": "86e8bdb43635ab9e9fd7546838aa03a443ae671b",
+          "type": "step-start",
+          "id": "prt_f60f313f6001tx0WH5Hhlyu5o8",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f2e2c00016a9mJV0aOPJ1ge"
+        },
+        {
+          "type": "tool",
+          "tool": "bash",
+          "callID": "toolu_01HsTsjqURJRhB4qAtLduPEa",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm && mkdir -p out && javac -d out src/main/java/TemporalDependencyRouter.java src/test/java/TemporalDependencyRouterTest.java && java -cp out TemporalDependencyRouterTest"
+            },
+            "output": "PASS  sample\nPASS  source_equals_target_satisfied\nPASS  source_equals_target_needs_roundtrip\nPASS  mask_zero\nPASS  unreachable\nPASS  deadline_exact\nPASS  deadline_miss\nPASS  expired_then_later_window\nPASS  weak_early_vs_strong_late\nFAIL  multi_window_choose_best\n  expected: 5\\n\n  actual:   15\\n\nPASS  start_after_deadline\nPASS  parallel_edges\n\n11/12 tests passed.\n",
+            "metadata": {
+              "output": "PASS  sample\nPASS  source_equals_target_satisfied\nPASS  source_equals_target_needs_roundtrip\nPASS  mask_zero\nPASS  unreachable\nPASS  deadline_exact\nPASS  deadline_miss\nPASS  expired_then_later_window\nPASS  weak_early_vs_strong_late\nFAIL  multi_window_choose_best\n  expected: 5\\n\n  actual:   15\\n\nPASS  start_after_deadline\nPASS  parallel_edges\n\n11/12 tests passed.\n",
+              "exit": 1,
+              "truncated": false
+            },
+            "title": "cd /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm && mkdir -p out && javac -d out src/main/java/TemporalDependencyRouter.java src/test/java/TemporalDependencyRouterTest.java && java -cp out TemporalDependencyRouterTest",
+            "time": {
+              "start": 1784037973316,
+              "end": 1784037973321
+            }
+          },
+          "metadata": {
+            "anthropic": {
+              "caller": {
+                "type": "direct"
+              }
+            }
+          },
+          "id": "prt_f60f313f90016Qchp4wNR6gcod",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f2e2c00016a9mJV0aOPJ1ge"
+        },
+        {
+          "reason": "tool-calls",
+          "snapshot": "86e8bdb43635ab9e9fd7546838aa03a443ae671b",
+          "type": "step-finish",
+          "tokens": {
+            "total": 27806,
+            "input": 2,
+            "output": 167,
+            "reasoning": 0,
+            "cache": {
+              "write": 3782,
+              "read": 23855
+            }
+          },
+          "cost": 0.03975,
+          "id": "prt_f60f31d64001SDYphBLLA0kok8",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f2e2c00016a9mJV0aOPJ1ge"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_f60f03e7d001YA0KGfsuY1lXaV",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "variant": "high",
+        "path": {
+          "cwd": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm",
+          "root": "/home/ubuntu/codingBenchmarks"
+        },
+        "cost": 0.0308535,
+        "tokens": {
+          "total": 28584,
+          "input": 2,
+          "output": 593,
+          "reasoning": 0,
+          "cache": {
+            "write": 352,
+            "read": 27637
+          }
+        },
+        "modelID": "claude-opus-4-8",
+        "providerID": "anthropic",
+        "time": {
+          "created": 1784037973379,
+          "completed": 1784037981157
+        },
+        "finish": "tool-calls",
+        "id": "msg_f60f31d83001p4oU3XphzPb9qZ",
+        "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC"
+      },
+      "parts": [
+        {
+          "snapshot": "86e8bdb43635ab9e9fd7546838aa03a443ae671b",
+          "type": "step-start",
+          "id": "prt_f60f32db7001v8n6osJiX3ZwtO",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f31d83001p4oU3XphzPb9qZ"
+        },
+        {
+          "type": "reasoning",
+          "text": "I'm working through the multi_window_choose_best test case and realizing my expected value was incorrect. With windows at (0,100,50), (0,100,40), and (10,100,5), the third window doesn't open until t=10, so the arrival time is actually 15, not 5. I need to update the test expectation to reflect this.",
+          "time": {
+            "start": 1784037977530,
+            "end": 1784037978157
+          },
+          "metadata": {
+            "anthropic": {
+              "signature": "EsUECokBCA8YAipAiJiSUhB1Mli1E2E6ily1iSXXyqhyoTAJ5kFHPWiZa9DjNF7D+kuwv+HmCxo7f13F41B6LfOCPY/dfrPsPiuKizIPY2xhdWRlLW9wdXMtNC04OABCCHRoaW5raW5nWiQ3YzIzYjYxZS02YzYwLTQ4ZDAtODU1YS01NzZiN2RhZDcxMmQSDEOiz7r630gC6U5gnRoMsVojsvw7ebPfNQPRIjCxszQi+9N3z4BvZkeS22mRbz6QXsXEQ7qxy22dwieD2A1elWqNbVXfY5zYUFVzWmcq6ALN4XQhtUT9lLPQMbH8vMYisTc4i9m+3ZslxhgD3dosFLWh692Cs/FeqM7k1PsvpJuu9387voXVmVE35OkLBe6q41buQPAbqXJhlnzeImg5kSN6hOimdtUpXhGxyp35sUjY6VNPR3uj5YG1d/88lAQKopXsqbdiesrnQM2rPG2etKqs/frHUWLyk+gW7VpNtWv57a6lO0xL9j4Pg7mbh+dN5J+X6TXa8QAuqrBPSukb1ZPhVokkzEY+85hDYvqu394EZjCCmRxYdZWmXYJjEAURadyxUUrL+rPqIOY9EnsPkYtfJBJMQ2pAukH8eqR1yNjQe7Ggu1skAjPPogMIX1VgxJY8jt0m4cAAwZjzwptDyBd9tS4naUK/KWoKqdJ56+ddXsUb/sbhH4pGzNIwtEOR93Txqj3mXi9aYCowTpPbmQiQgTriGkmN2YOsreanH++WtjLX6c8A+og6rlIgl39U9rPmRozlGPIYAQ=="
+            }
+          },
+          "id": "prt_f60f32dba001KBjTC7b7nqdzBc",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f31d83001p4oU3XphzPb9qZ"
+        },
+        {
+          "type": "text",
+          "text": "My test expectation was wrong — window 3 opens at time 10, so departure waits to 10, arriving at 15. Let me fix the test.",
+          "time": {
+            "start": 1784037978167,
+            "end": 1784037978229
+          },
+          "id": "prt_f60f33037001cxAg6rTipDVjjF",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f31d83001p4oU3XphzPb9qZ"
+        },
+        {
+          "type": "tool",
+          "tool": "edit",
+          "callID": "toolu_01DXa71Hr6NFhs1ywgKpFmaP",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java",
+              "oldString": "        run(\"multi_window_choose_best\",\n                \"2 1 0 1\\n\" +\n                \"0\\n0\\n\" +\n                \"1 2 3\\n0 100 50\\n0 100 40\\n10 100 5\\n\" +\n                \"1 2 0 100 0\\n\",\n                \"5\\n\");",
+              "newString": "        // Window 3 opens at t=10 (must wait) -> arr=15; window 2 open now -> arr=40. Best is 15.\n        run(\"multi_window_choose_best\",\n                \"2 1 0 1\\n\" +\n                \"0\\n0\\n\" +\n                \"1 2 3\\n0 100 50\\n0 100 40\\n10 100 5\\n\" +\n                \"1 2 0 100 0\\n\",\n                \"15\\n\");"
+            },
+            "output": "Edit applied successfully.",
+            "metadata": {
+              "diagnostics": {},
+              "diff": "Index: /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java\n===================================================================\n--- /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java\n+++ /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java\n@@ -103,14 +103,15 @@\n         \"1 3 0 100 2\\n\",\n         \"6\\n\");\n \n // Multiple windows: choose the one giving earliest valid arrival.\n+// Window 3 opens at t=10 (must wait) -> arr=15; window 2 open now -> arr=40. Best is 15.\n run(\"multi_window_choose_best\",\n         \"2 1 0 1\\n\" +\n         \"0\\n0\\n\" +\n         \"1 2 3\\n0 100 50\\n0 100 40\\n10 100 5\\n\" +\n         \"1 2 0 100 0\\n\",\n-        \"5\\n\");\n+        \"15\\n\");\n \n // startTime after deadline -> -1.\n run(\"start_after_deadline\",\n         \"2 1 0 1\\n\" +\n",
+              "filediff": {
+                "file": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java",
+                "patch": "Index: /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java\n===================================================================\n--- /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java\n+++ /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java\n@@ -103,14 +103,15 @@\n         \"1 3 0 100 2\\n\",\n         \"6\\n\");\n \n // Multiple windows: choose the one giving earliest valid arrival.\n+// Window 3 opens at t=10 (must wait) -> arr=15; window 2 open now -> arr=40. Best is 15.\n run(\"multi_window_choose_best\",\n         \"2 1 0 1\\n\" +\n         \"0\\n0\\n\" +\n         \"1 2 3\\n0 100 50\\n0 100 40\\n10 100 5\\n\" +\n         \"1 2 0 100 0\\n\",\n-        \"5\\n\");\n+        \"15\\n\");\n \n // startTime after deadline -> -1.\n run(\"start_after_deadline\",\n         \"2 1 0 1\\n\" +\n",
+                "additions": 2,
+                "deletions": 1
+              },
+              "truncated": false
+            },
+            "title": "models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java",
+            "time": {
+              "start": 1784037981048,
+              "end": 1784037981052
+            }
+          },
+          "metadata": {
+            "anthropic": {
+              "caller": {
+                "type": "direct"
+              }
+            }
+          },
+          "id": "prt_f60f33079001NkJ3ATB2y4es4h",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f31d83001p4oU3XphzPb9qZ"
+        },
+        {
+          "reason": "tool-calls",
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-finish",
+          "tokens": {
+            "total": 28584,
+            "input": 2,
+            "output": 593,
+            "reasoning": 0,
+            "cache": {
+              "write": 352,
+              "read": 27637
+            }
+          },
+          "cost": 0.0308535,
+          "id": "prt_f60f33bbf001LHTUaKyULhooqD",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f31d83001p4oU3XphzPb9qZ"
+        },
+        {
+          "type": "patch",
+          "hash": "86e8bdb43635ab9e9fd7546838aa03a443ae671b",
+          "files": [
+            "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java"
+          ],
+          "id": "prt_f60f33be2001P6pgYYSeU87Mds",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f31d83001p4oU3XphzPb9qZ"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_f60f03e7d001YA0KGfsuY1lXaV",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "variant": "high",
+        "path": {
+          "cwd": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm",
+          "root": "/home/ubuntu/codingBenchmarks"
+        },
+        "cost": 0.02204825,
+        "tokens": {
+          "total": 28768,
+          "input": 2,
+          "output": 170,
+          "reasoning": 0,
+          "cache": {
+            "write": 607,
+            "read": 27989
+          }
+        },
+        "modelID": "claude-opus-4-8",
+        "providerID": "anthropic",
+        "time": {
+          "created": 1784037981161,
+          "completed": 1784037984735
+        },
+        "finish": "tool-calls",
+        "id": "msg_f60f33be9001gl8ev37KkNl3AH",
+        "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC"
+      },
+      "parts": [
+        {
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-start",
+          "id": "prt_f60f342da001o7Gzj96CADe5Li",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f33be9001gl8ev37KkNl3AH"
+        },
+        {
+          "type": "tool",
+          "tool": "bash",
+          "callID": "toolu_01NBnL63WGZEsdWEhx4XRW7H",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm && javac -d out src/main/java/TemporalDependencyRouter.java src/test/java/TemporalDependencyRouterTest.java && java -cp out TemporalDependencyRouterTest 2>&1 | tail -3"
+            },
+            "output": "PASS  parallel_edges\n\n12/12 tests passed.\n",
+            "metadata": {
+              "output": "PASS  parallel_edges\n\n12/12 tests passed.\n",
+              "exit": 0,
+              "truncated": false
+            },
+            "title": "cd /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm && javac -d out src/main/java/TemporalDependencyRouter.java src/test/java/TemporalDependencyRouterTest.java && java -cp out TemporalDependencyRouterTest 2>&1 | tail -3",
+            "time": {
+              "start": 1784037984674,
+              "end": 1784037984679
+            }
+          },
+          "metadata": {
+            "anthropic": {
+              "caller": {
+                "type": "direct"
+              }
+            }
+          },
+          "id": "prt_f60f342de001dJSSUbbLevd1Wj",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f33be9001gl8ev37KkNl3AH"
+        },
+        {
+          "reason": "tool-calls",
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-finish",
+          "tokens": {
+            "total": 28768,
+            "input": 2,
+            "output": 170,
+            "reasoning": 0,
+            "cache": {
+              "write": 607,
+              "read": 27989
+            }
+          },
+          "cost": 0.02204825,
+          "id": "prt_f60f349c0001bqf7EaK8LVGvsD",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f33be9001gl8ev37KkNl3AH"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_f60f03e7d001YA0KGfsuY1lXaV",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "variant": "high",
+        "path": {
+          "cwd": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm",
+          "root": "/home/ubuntu/codingBenchmarks"
+        },
+        "cost": 0.041733,
+        "tokens": {
+          "total": 29842,
+          "input": 2,
+          "output": 1048,
+          "reasoning": 0,
+          "cache": {
+            "write": 196,
+            "read": 28596
+          }
+        },
+        "modelID": "claude-opus-4-8",
+        "providerID": "anthropic",
+        "time": {
+          "created": 1784037984739,
+          "completed": 1784037998885
+        },
+        "finish": "tool-calls",
+        "id": "msg_f60f349e3001NwHkgMWl9KPm6n",
+        "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC"
+      },
+      "parts": [
+        {
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-start",
+          "id": "prt_f60f352820018T6hct7SdKvUyC",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f349e3001NwHkgMWl9KPm6n"
+        },
+        {
+          "type": "reasoning",
+          "text": "Now I'm running a performance sanity check with a large random input to make sure the solution handles it efficiently. I'll generate a stress test with a substantial dataset—around 100,000 elements, 300,000 operations, 600,000 windows, and 100,000 queries—keeping the required masks small to avoid exploding the state space while using larger masks for a subset to test real-world scenarios.",
+          "time": {
+            "start": 1784037986949,
+            "end": 1784037990711
+          },
+          "metadata": {
+            "anthropic": {
+              "signature": "EqMFCokBCA8YAipAQyvLF1CRwEpd/Fx/17b8q1joFa8EzDDDqNVzEsHAZf3LIgVFsJnHSq2vC5Q4vgtkkd0i6/0vjrF8cs3OuctevDIPY2xhdWRlLW9wdXMtNC04OABCCHRoaW5raW5nWiQ3YzIzYjYxZS02YzYwLTQ4ZDAtODU1YS01NzZiN2RhZDcxMmQSDNzSDcypqAR7wp4MPxoM41OVJ4NXZ3g60LChIjAKZuHvQpW6x1BOfoJaVM1FbUzeJha8EP6HU7v+D6BB5qKxjfFN1Z651qWQW+VUWjgqxgN/tf2WXOjPatoOwgQJtku+ly2K1KMFfHKqK++Gs/Kw8chHAt3/5dqbR0C3eyWUGqrV34Dcut2Gf7KjJcxXuQBei9FPvZ8ipL2nkszBC5FwtkAoM42R29fx+mRJeD8rCb/vBLB2bG/7OLzyW8R5SkHQhoLTerG2uGS5tUl32UJUzedKOUeONi/ATboGstSyUau56DjLqsYWe2OUXgc3U8iHVZjG5IkrSnMSJnfSq6jiMTdsOuCWzvmHD30IRn/ya4DdUdnYO2kXVlbNSUxjudmivh//ugcgbAlZneOTcobLRIDVLxgk9LoxligT3l8b+3vm90kTcoOG7ouPzN4kTxarvf8k1ap9o8gVLG9VhLTgrjZquZomNkSIkGnjLNc//TbAT5zbHjZ0B7Wb4hFwUdHSLb53j2uGdfTHCZDybFSTu8W1wNWgx50IiOJPEUAwebmdt3PEslDa3a5Lc5QhDotqMJ0Tabn84o6QzPuQTD5LrOVMgzNnm7BFDkHSwt5pvyBU1GN5CRYlWh0KU+kwMwcxahhc8bcNoubP+O6kJaIKzGPUAD6cloGDZ9N6zHtDBeQXJOM7uiomeEyQkawmDM4uPM2TC9JDGAE="
+            }
+          },
+          "id": "prt_f60f352840017F0ySOCP9YNfyy",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f349e3001NwHkgMWl9KPm6n"
+        },
+        {
+          "type": "text",
+          "text": "Let me run a performance stress test with large input.",
+          "time": {
+            "start": 1784037990716,
+            "end": 1784037990728
+          },
+          "id": "prt_f60f3613c001jq7YErhrlKM3p0",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f349e3001NwHkgMWl9KPm6n"
+        },
+        {
+          "type": "tool",
+          "tool": "bash",
+          "callID": "toolu_013HJteg7mR3RKrRYoBo4xGN",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm && cat > /tmp/Gen.java <<'EOF'\nimport java.util.*;\nimport java.io.*;\npublic class Gen {\n  public static void main(String[] a) throws Exception {\n    int N=100000, M=300000, K=12, Q=100000;\n    Random r=new Random(42);\n    StringBuilder sb=new StringBuilder();\n    sb.append(N+\" \"+M+\" \"+K+\" \"+Q+\"\\n\");\n    for(int i=1;i<=N;i++) sb.append(r.nextInt(1<<K)).append('\\n');\n    int totalWin=600000;\n    // distribute windows: base 1 each + extra\n    int extra=totalWin-M;\n    for(int e=0;e<M;e++){\n      int u=1+r.nextInt(N), v=1+r.nextInt(N);\n      int w=1;\n      if(extra>0 && r.nextInt(3)==0){ int add=Math.min(extra, 1+r.nextInt(3)); w+=add; extra-=add;}\n      sb.append(u+\" \"+v+\" \"+w+\"\\n\");\n      for(int j=0;j<w;j++){\n        long open=r.nextInt(1000000);\n        long close=open+r.nextInt(1000000);\n        long lat=1+r.nextInt(1000000000);\n        sb.append(open+\" \"+close+\" \"+lat+\"\\n\");\n      }\n    }\n    for(int qi=0;qi<Q;qi++){\n      int s=1+r.nextInt(N), t=1+r.nextInt(N);\n      long start=r.nextInt(1000000);\n      long dl=start+r.nextInt(2000000000);\n      // keep required mask small-ish to bound state space; occasionally larger\n      int bits = r.nextInt(100)<90 ? r.nextInt(4) : r.nextInt(K+1);\n      int mask=0; for(int b=0;b<bits;b++) mask|=1<<r.nextInt(K);\n      sb.append(s+\" \"+t+\" \"+start+\" \"+dl+\" \"+mask+\"\\n\");\n    }\n    try(Writer w=new FileWriter(\"/tmp/big_input.txt\")){ w.write(sb.toString()); }\n    System.out.println(\"generated\");\n  }\n}\nEOF\njavac -d /tmp /tmp/Gen.java && java -cp /tmp Gen && ls -la /tmp/big_input.txt"
+            },
+            "output": "generated\n-rw-rw-r-- 1 ubuntu ubuntu 20003867 Jul 14 22:06 /tmp/big_input.txt\n",
+            "metadata": {
+              "output": "generated\n-rw-rw-r-- 1 ubuntu ubuntu 20003867 Jul 14 22:06 /tmp/big_input.txt\n",
+              "exit": 0,
+              "truncated": false
+            },
+            "title": "cd /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm && cat > /tmp/Gen.java <<'EOF'\nimport java.util.*;\nimport java.io.*;\npublic class Gen {\n  public static void main(String[] a) throws Exception {\n    int N=100000, M=300000, K=12, Q=100000;\n    Random r=new Random(42);\n    StringBuilder sb=new StringBuilder();\n    sb.append(N+\" \"+M+\" \"+K+\" \"+Q+\"\\n\");\n    for(int i=1;i<=N;i++) sb.append(r.nextInt(1<<K)).append('\\n');\n    int totalWin=600000;\n    // distribute windows: base 1 each + extra\n    int extra=totalWin-M;\n    for(int e=0;e<M;e++){\n      int u=1+r.nextInt(N), v=1+r.nextInt(N);\n      int w=1;\n      if(extra>0 && r.nextInt(3)==0){ int add=Math.min(extra, 1+r.nextInt(3)); w+=add; extra-=add;}\n      sb.append(u+\" \"+v+\" \"+w+\"\\n\");\n      for(int j=0;j<w;j++){\n        long open=r.nextInt(1000000);\n        long close=open+r.nextInt(1000000);\n        long lat=1+r.nextInt(1000000000);\n        sb.append(open+\" \"+close+\" \"+lat+\"\\n\");\n      }\n    }\n    for(int qi=0;qi<Q;qi++){\n      int s=1+r.nextInt(N), t=1+r.nextInt(N);\n      long start=r.nextInt(1000000);\n      long dl=start+r.nextInt(2000000000);\n      // keep required mask small-ish to bound state space; occasionally larger\n      int bits = r.nextInt(100)<90 ? r.nextInt(4) : r.nextInt(K+1);\n      int mask=0; for(int b=0;b<bits;b++) mask|=1<<r.nextInt(K);\n      sb.append(s+\" \"+t+\" \"+start+\" \"+dl+\" \"+mask+\"\\n\");\n    }\n    try(Writer w=new FileWriter(\"/tmp/big_input.txt\")){ w.write(sb.toString()); }\n    System.out.println(\"generated\");\n  }\n}\nEOF\njavac -d /tmp /tmp/Gen.java && java -cp /tmp Gen && ls -la /tmp/big_input.txt",
+            "time": {
+              "start": 1784037998813,
+              "end": 1784037998818
+            }
+          },
+          "metadata": {
+            "anthropic": {
+              "caller": {
+                "type": "direct"
+              }
+            }
+          },
+          "id": "prt_f60f3614b001rvOdYFlO9b6mN7",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f349e3001NwHkgMWl9KPm6n"
+        },
+        {
+          "reason": "tool-calls",
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-finish",
+          "tokens": {
+            "total": 29842,
+            "input": 2,
+            "output": 1048,
+            "reasoning": 0,
+            "cache": {
+              "write": 196,
+              "read": 28596
+            }
+          },
+          "cost": 0.041733,
+          "id": "prt_f60f38102001HDnRq9LW8dyOEr",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f349e3001NwHkgMWl9KPm6n"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_f60f03e7d001YA0KGfsuY1lXaV",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "variant": "high",
+        "path": {
+          "cwd": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm",
+          "root": "/home/ubuntu/codingBenchmarks"
+        },
+        "cost": 0.0267435,
+        "tokens": {
+          "total": 30117,
+          "input": 2,
+          "output": 217,
+          "reasoning": 0,
+          "cache": {
+            "write": 1106,
+            "read": 28792
+          }
+        },
+        "modelID": "claude-opus-4-8",
+        "providerID": "anthropic",
+        "time": {
+          "created": 1784037998890,
+          "completed": 1784038006719
+        },
+        "finish": "tool-calls",
+        "id": "msg_f60f3812a001670TAlnMAQjBBI",
+        "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC"
+      },
+      "parts": [
+        {
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-start",
+          "id": "prt_f60f397fd001GcmuGk9YDtzrQS",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f3812a001670TAlnMAQjBBI"
+        },
+        {
+          "type": "tool",
+          "tool": "bash",
+          "callID": "toolu_01QeuLepgJVr9pujZGYN4HVW",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm && /usr/bin/time -v java -Xss64m -cp out TemporalDependencyRouter < /tmp/big_input.txt > /tmp/big_out.txt 2> /tmp/time.txt; echo \"exit=$?\"; wc -l /tmp/big_out.txt; grep -E \"Elapsed|Maximum resident\" /tmp/time.txt"
+            },
+            "output": "exit=0\n100000 /tmp/big_out.txt\n\tElapsed (wall clock) time (h:mm:ss or m:ss): 0:00.31\n\tMaximum resident set size (kbytes): 97308\n",
+            "metadata": {
+              "output": "exit=0\n100000 /tmp/big_out.txt\n\tElapsed (wall clock) time (h:mm:ss or m:ss): 0:00.31\n\tMaximum resident set size (kbytes): 97308\n",
+              "exit": 0,
+              "truncated": false
+            },
+            "title": "cd /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm && /usr/bin/time -v java -Xss64m -cp out TemporalDependencyRouter < /tmp/big_input.txt > /tmp/big_out.txt 2> /tmp/time.txt; echo \"exit=$?\"; wc -l /tmp/big_out.txt; grep -E \"Elapsed|Maximum resident\" /tmp/time.txt",
+            "time": {
+              "start": 1784038006640,
+              "end": 1784038006645
+            }
+          },
+          "metadata": {
+            "anthropic": {
+              "caller": {
+                "type": "direct"
+              }
+            }
+          },
+          "id": "prt_f60f39800001k4gQsgtrPsku9i",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f3812a001670TAlnMAQjBBI"
+        },
+        {
+          "reason": "tool-calls",
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-finish",
+          "tokens": {
+            "total": 30117,
+            "input": 2,
+            "output": 217,
+            "reasoning": 0,
+            "cache": {
+              "write": 1106,
+              "read": 28792
+            }
+          },
+          "cost": 0.0267435,
+          "id": "prt_f60f39fa6001X46iEEIycxabGh",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f3812a001670TAlnMAQjBBI"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_f60f03e7d001YA0KGfsuY1lXaV",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "variant": "high",
+        "path": {
+          "cwd": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm",
+          "root": "/home/ubuntu/codingBenchmarks"
+        },
+        "cost": 0.04897775,
+        "tokens": {
+          "total": 31482,
+          "input": 2,
+          "output": 1287,
+          "reasoning": 0,
+          "cache": {
+            "write": 295,
+            "read": 29898
+          }
+        },
+        "modelID": "claude-opus-4-8",
+        "providerID": "anthropic",
+        "time": {
+          "created": 1784038006723,
+          "completed": 1784038025456
+        },
+        "finish": "tool-calls",
+        "id": "msg_f60f39fc3001gBSjMFb5Qqs3Ra",
+        "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC"
+      },
+      "parts": [
+        {
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-start",
+          "id": "prt_f60f3a63f001SZLAu6Ha34vMSi",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f39fc3001gBSjMFb5Qqs3Ra"
+        },
+        {
+          "type": "reasoning",
+          "text": "The 0.31s runtime seems suspiciously quick, but I realize the random graph is sparse and many queries hit their deadlines before exploring the full state space. The real stress test would be a dense graph where the target is reachable through multiple capability combinations, forcing the search to explore more thoroughly before terminating.",
+          "time": {
+            "start": 1784038008385,
+            "end": 1784038014800
+          },
+          "metadata": {
+            "anthropic": {
+              "signature": "ErQJCokBCA8YAipAnHlQmYQL8pFUvGEBgIfEbhmrM7jZrDHgXLwUs8R1XbqUBaVSBWQDcYqfsRRq3OiWNGcmL8P1D5ufs7jNGURvljIPY2xhdWRlLW9wdXMtNC04OABCCHRoaW5raW5nWiQ3YzIzYjYxZS02YzYwLTQ4ZDAtODU1YS01NzZiN2RhZDcxMmQSDFZySeq/Df/X0XcpURoMP3eY+l/Py0kdz8D9IjBCqxUzkxI/O1dsPfg2zu+FgzVbqr1CC0NUsqozoaV1Yu5SyRBj4yuP8wTrF8XZjN4q1weOY10fkefgjbNEsbIbwz51kCFTgUir5Tu4CLNA67FBwoq+Wg57YivSIHn7pTBEADOEcloNa0JNgzoZkqIawdDasaOjkGdnW0wewPk+F/RGhoUo1Mia0krG5edKdrGLXkr7UX95ibc2jrGXYCABvVHARViDMOxYNlOTLQEHteE5CX5SMjAo3PqmyGzdLa6Uusp+pq+Msg8UDhFa4ZBMURvfLU6WIuYFPe/iovEZ5YOJl3/RcnzlOoCLUzz/o8GXQOYDj4RHRpAX4EPV8O+7phN7T2TynM330ARMa/LXseWLpge6taWjxaHyyvb1HbrNtK5rXBKVGhREMfiEoJikd47lBZ/FTidOdaWq7oTouWwmGHjCEA/thZFmTPtf4vHUxZKdaDPZZSPoU/4pgWJeP16vgLZq8h9CKqo96EhLKA8cVnGVUNewf71XJJX0Bz6ZOxDrZZFGUXNsHxB9RYIMaSjHHUJFKMx8d/KRuvvszBdtnRXcvys0vUkE8szcuYWzCx/+CrIkt+VGuJcuxjmGmIXAF04jSLSaB/r9nbIIqnlaLdWkziI4FbMUz6TIDcHlO7JTOZcfmT6lPYyaNvsrMxFC6PyuvHDUrPaZV9TISjPonSZsJqD8lWPwqmsNF7Us80qkwpjLVhwvjPwzCE+D9n4cc2EF9GVv07qBQgiuHvMubun/d5JXbyFw1NUAszK2MvAEiF3Jx7JDKadd+WKJWckJiFEJjRfrWakjYW3IUEF3wT5gtD9LOPC0yb4GWiYRlbtitknGOd0XnDcz5YBKXyR3uEZoOrfKDd7tbY9eNvNNkIzB7iqefMjVUIZ/yn829d/OR3InKdv524qUHlp05R28aIBeeyjz3hsHYESFmVaGcxavf9hXDsan1roPGqUJ0TrfNm0yLtTX4sr45aSC+mRB9lxdh1MyeB+4Stpdnc93WipT5e/O9zfhoiRe/wkpUqA4wyZK+ZD1I715CAxl0B+Aa1zWZvKNHFsfPtI5y46o0dS/gbj+C7PDdakjX1Q+JD7y3R/C6+vDWF3W1R9aaIVs+4Z22U9RnhNPwyltAJ/sCrB8hLf07jg+29PXNbtjhYaBYnBi14//WxsSSob7O0N5+oFsbWnMTA/a8A4kjdow3bI0khGgNEAiwelBAuyPHSneO400On+uW9pezMFn3BXMK2MboCH4gVoZlQlmmRZJzA5jhLhGeE5ZUqxDexJLN7gYt7yln7OLqcSnH9FQPD3Zue/KRt+CYdo96LLI1sNeqtV6aMuD4CAye909PCb99oZv+vuJ6kebNEOmeV86MDGAYdd32SEDGxgB"
+            }
+          },
+          "id": "prt_f60f3a6410016v4gT10QyYE2mj",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f39fc3001gBSjMFb5Qqs3Ra"
+        },
+        {
+          "type": "text",
+          "text": "Fast, but the random graph may under-exercise the capability state space. Let me stress with full 12-bit required masks on a well-connected graph.",
+          "time": {
+            "start": 1784038014802,
+            "end": 1784038014862
+          },
+          "id": "prt_f60f3bf52001ZuHG1P5ZJ0U85F",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f39fc3001gBSjMFb5Qqs3Ra"
+        },
+        {
+          "type": "tool",
+          "tool": "bash",
+          "callID": "toolu_01MjbHHaz1ozmCyk4qvD1x57",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm && cat > /tmp/Gen2.java <<'EOF'\nimport java.util.*;\nimport java.io.*;\npublic class Gen2 {\n  public static void main(String[] a) throws Exception {\n    // Dense-ish graph to force large capability-state exploration.\n    int N=2000, K=12, Q=2000;\n    Random r=new Random(7);\n    // each node connects to ~10 others -> M=20000, windows ~ up to 600000 via multiples\n    List<long[]> edges=new ArrayList<>();\n    for(int u=1;u<=N;u++){\n      for(int j=0;j<15;j++){\n        int v=1+r.nextInt(N);\n        edges.add(new long[]{u,v});\n      }\n    }\n    int M=edges.size();\n    StringBuilder sb=new StringBuilder();\n    sb.append(N+\" \"+M+\" \"+K+\" \"+Q+\"\\n\");\n    for(int i=1;i<=N;i++) sb.append(r.nextInt(1<<K)).append('\\n');\n    for(long[] e: edges){\n      int w=1+r.nextInt(3);\n      sb.append(e[0]+\" \"+e[1]+\" \"+w+\"\\n\");\n      for(int j=0;j<w;j++){\n        long open=r.nextInt(1000);\n        long close=open+1000+r.nextInt(100000);\n        long lat=1+r.nextInt(1000);\n        sb.append(open+\" \"+close+\" \"+lat+\"\\n\");\n      }\n    }\n    for(int qi=0;qi<Q;qi++){\n      int s=1+r.nextInt(N), t=1+r.nextInt(N);\n      sb.append(s+\" \"+t+\" 0 100000000 4095\\n\"); // full 12-bit mask, generous deadline\n    }\n    try(Writer w=new FileWriter(\"/tmp/hard_input.txt\")){ w.write(sb.toString()); }\n    System.out.println(\"N=\"+N+\" M=\"+M+\" Q=\"+Q);\n  }\n}\nEOF\njavac -d /tmp /tmp/Gen2.java && java -cp /tmp Gen2 && /usr/bin/time -v java -Xss64m -cp out TemporalDependencyRouter < /tmp/hard_input.txt > /tmp/hard_out.txt 2> /tmp/time2.txt; echo \"exit=$?\"; grep -E \"Elapsed|Maximum resident\" /tmp/time2.txt; sort /tmp/hard_out.txt | uniq -c | head"
+            },
+            "output": "N=2000 M=30000 Q=2000\nexit=0\n\tElapsed (wall clock) time (h:mm:ss or m:ss): 0:01.63\n\tMaximum resident set size (kbytes): 47492\n      1 1004\n      3 1012\n      1 1019\n      1 1022\n      1 1025\n      1 1032\n      1 1040\n      1 1043\n      1 1057\n      1 1062\n",
+            "metadata": {
+              "output": "N=2000 M=30000 Q=2000\nexit=0\n\tElapsed (wall clock) time (h:mm:ss or m:ss): 0:01.63\n\tMaximum resident set size (kbytes): 47492\n      1 1004\n      3 1012\n      1 1019\n      1 1022\n      1 1025\n      1 1032\n      1 1040\n      1 1043\n      1 1057\n      1 1062\n",
+              "exit": 0,
+              "truncated": false
+            },
+            "title": "cd /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm && cat > /tmp/Gen2.java <<'EOF'\nimport java.util.*;\nimport java.io.*;\npublic class Gen2 {\n  public static void main(String[] a) throws Exception {\n    // Dense-ish graph to force large capability-state exploration.\n    int N=2000, K=12, Q=2000;\n    Random r=new Random(7);\n    // each node connects to ~10 others -> M=20000, windows ~ up to 600000 via multiples\n    List<long[]> edges=new ArrayList<>();\n    for(int u=1;u<=N;u++){\n      for(int j=0;j<15;j++){\n        int v=1+r.nextInt(N);\n        edges.add(new long[]{u,v});\n      }\n    }\n    int M=edges.size();\n    StringBuilder sb=new StringBuilder();\n    sb.append(N+\" \"+M+\" \"+K+\" \"+Q+\"\\n\");\n    for(int i=1;i<=N;i++) sb.append(r.nextInt(1<<K)).append('\\n');\n    for(long[] e: edges){\n      int w=1+r.nextInt(3);\n      sb.append(e[0]+\" \"+e[1]+\" \"+w+\"\\n\");\n      for(int j=0;j<w;j++){\n        long open=r.nextInt(1000);\n        long close=open+1000+r.nextInt(100000);\n        long lat=1+r.nextInt(1000);\n        sb.append(open+\" \"+close+\" \"+lat+\"\\n\");\n      }\n    }\n    for(int qi=0;qi<Q;qi++){\n      int s=1+r.nextInt(N), t=1+r.nextInt(N);\n      sb.append(s+\" \"+t+\" 0 100000000 4095\\n\"); // full 12-bit mask, generous deadline\n    }\n    try(Writer w=new FileWriter(\"/tmp/hard_input.txt\")){ w.write(sb.toString()); }\n    System.out.println(\"N=\"+N+\" M=\"+M+\" Q=\"+Q);\n  }\n}\nEOF\njavac -d /tmp /tmp/Gen2.java && java -cp /tmp Gen2 && /usr/bin/time -v java -Xss64m -cp out TemporalDependencyRouter < /tmp/hard_input.txt > /tmp/hard_out.txt 2> /tmp/time2.txt; echo \"exit=$?\"; grep -E \"Elapsed|Maximum resident\" /tmp/time2.txt; sort /tmp/hard_out.txt | uniq -c | head",
+            "time": {
+              "start": 1784038025396,
+              "end": 1784038025400
+            }
+          },
+          "metadata": {
+            "anthropic": {
+              "caller": {
+                "type": "direct"
+              }
+            }
+          },
+          "id": "prt_f60f3bf91001Pd1BTQYFVQOX6P",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f39fc3001gBSjMFb5Qqs3Ra"
+        },
+        {
+          "reason": "tool-calls",
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-finish",
+          "tokens": {
+            "total": 31482,
+            "input": 2,
+            "output": 1287,
+            "reasoning": 0,
+            "cache": {
+              "write": 295,
+              "read": 29898
+            }
+          },
+          "cost": 0.04897775,
+          "id": "prt_f60f3e8d7001y6GOWGWCs4A8r8",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f39fc3001gBSjMFb5Qqs3Ra"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_f60f03e7d001YA0KGfsuY1lXaV",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "variant": "high",
+        "path": {
+          "cwd": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm",
+          "root": "/home/ubuntu/codingBenchmarks"
+        },
+        "cost": 0.084019,
+        "tokens": {
+          "total": 34021,
+          "input": 2,
+          "output": 2400,
+          "reasoning": 0,
+          "cache": {
+            "write": 1426,
+            "read": 30193
+          }
+        },
+        "modelID": "claude-opus-4-8",
+        "providerID": "anthropic",
+        "time": {
+          "created": 1784038025461,
+          "completed": 1784038154321
+        },
+        "finish": "tool-calls",
+        "id": "msg_f60f3e8f5001lETD0jQkXtE2kc",
+        "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC"
+      },
+      "parts": [
+        {
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-start",
+          "id": "prt_f60f3fa7b0013CnWqPI82tOJHS",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f3e8f5001lETD0jQkXtE2kc"
+        },
+        {
+          "type": "reasoning",
+          "text": "The performance is solid at 1.63 seconds even with the full graph and dominance pruning handling the worst-case complexity well. Now I want to verify the correctness of my solution against a brute-force approach on smaller test cases to make sure there are no edge cases I'm missing.",
+          "time": {
+            "start": 1784038029949,
+            "end": 1784038030449
+          },
+          "metadata": {
+            "anthropic": {
+              "signature": "EowFCokBCA8YAipAy9kUDLxnu4Pk9/tQ7/e0YFXozTNAlfYhcpfBEPNBpwEzICAES8ZBtHa06fs2NUocsjRr8ewAgoBIiEWi95ipyDIPY2xhdWRlLW9wdXMtNC04OABCCHRoaW5raW5nWiQ3YzIzYjYxZS02YzYwLTQ4ZDAtODU1YS01NzZiN2RhZDcxMmQSDJ9s1h+3A/c1qwbb9RoM5kMxp1vJN4bSI5mjIjB3JjzUZT8ipBnIgsAA1kRvKToYXEzNwUay3Age099ZYkgDZDGqxn7KgMm5TKKM0e8qrwO30UljqZPMSL1t17Ed8II+YAJiKBSTIPeYBPi09+ara0esJkkJcl/0Xgmss/UbebfJWpMvGDA7GAmgjFbUGg4jUSAHR+scKPlg1cFxsA2xswvYFy1ltEyTt23kqih2/5dfZzx328dAPK8IkuaMk05YZtZFV8TZewWhE0xf/AfXI2/1K/IEWexmeNC9br7Inzttg8C7rZNfKokE5KNnoO2qBEvbq9ElSZjnYZSJxFKkIXqTVGeG3iCSLjPMnAADbgEs4tFdozaSqbELWaQAn6Mz/8HLtKgRAkxHEv+LKaV+nNM4c1euScLYs7rSRAXZuBdlO7XzPZ3J3jfvzyCm8ck8Jbmuqq40v874FIkPbAOaGnQaYBWvJNTHs/3kWiKg+Z+dqY90YqKktUfEd81upaVRroqEKfrcF8jsFA14JXfrIk9wLvmPJ/KGacP2YaBhSMNcrsdcQiWVhGNPaXKHR5RqZk7svC0FEiYw4Yw1NuFh8x751apZxXbXjzz/DbKSrYxERazTDVwheMIX0bIwFyOBRN9QLvxItL2vpxZKiKjiySinTMpocw4xF09jiihfsxgB"
+            }
+          },
+          "id": "prt_f60f3fa7d001V2QPDzNLBmwA1K",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f3e8f5001lETD0jQkXtE2kc"
+        },
+        {
+          "type": "text",
+          "text": "Let me validate correctness against an independent brute-force solver on many small random cases.",
+          "time": {
+            "start": 1784038030452,
+            "end": 1784038030455
+          },
+          "id": "prt_f60f3fc74001yhQhv73LGvENBy",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f3e8f5001lETD0jQkXtE2kc"
+        },
+        {
+          "type": "tool",
+          "tool": "bash",
+          "callID": "toolu_01T3db72u9cKEoaqQ76G7ARw",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm && cat > /tmp/Brute.java <<'EOF'\nimport java.util.*;\nimport java.io.*;\n// Brute force: Dijkstra over (node,mask) with a HashMap, no fancy pruning. Independent impl.\npublic class Brute {\n  public static void main(String[] x) throws Exception {\n    Scanner in=new Scanner(new File(x[0]));\n    int N=in.nextInt(),M=in.nextInt(),K=in.nextInt(),Q=in.nextInt();\n    int[] cap=new int[N+1];\n    for(int i=1;i<=N;i++) cap[i]=in.nextInt();\n    List<long[]>[] adj=new List[N+1];\n    for(int i=1;i<=N;i++) adj[i]=new ArrayList<>();\n    // store windows per edge: we keep list of edges each with windows\n    List<int[]>[] edgeList=new List[N+1];\n    for(int i=1;i<=N;i++) edgeList[i]=new ArrayList<>();\n    List<long[]> allWin=new ArrayList<>();\n    // represent: for node u, list of {v, winStart, winEnd}\n    List<long[]>[] E=new List[N+1];\n    for(int i=1;i<=N;i++) E[i]=new ArrayList<>();\n    for(int e=0;e<M;e++){\n      int u=in.nextInt(),v=in.nextInt(),w=in.nextInt();\n      int s=allWin.size();\n      for(int j=0;j<w;j++){ allWin.add(new long[]{in.nextLong(),in.nextLong(),in.nextLong()}); }\n      int en=allWin.size();\n      E[u].add(new long[]{v,s,en});\n    }\n    StringBuilder sb=new StringBuilder();\n    for(int q=0;q<Q;q++){\n      int src=in.nextInt(),tgt=in.nextInt(); long st=in.nextLong(),dl=in.nextLong(); int R=in.nextInt();\n      // dijkstra\n      HashMap<Long,Long> best=new HashMap<>();\n      PriorityQueue<long[]> pq=new PriorityQueue<>((a,b)->Long.compare(a[0],b[0]));\n      int sm=cap[src]&R;\n      long ans=-1;\n      if(st<=dl){\n        best.put((long)src*(R+1)+sm, st);\n        pq.add(new long[]{st,src,sm});\n        while(!pq.isEmpty()){\n          long[] top=pq.poll(); long t=top[0]; int node=(int)top[1]; int mask=(int)top[2];\n          if(t>dl){ break; }\n          Long b=best.get((long)node*(R+1)+mask);\n          if(b==null||b<t) continue;\n          if(node==tgt&&mask==R){ ans=t; break; }\n          for(long[] ed: E[node]){\n            int v=(int)ed[0]; int ws=(int)ed[1], we=(int)ed[2];\n            long arr=-1;\n            for(int wi=ws;wi<we;wi++){\n              long[] win=allWin.get(wi);\n              if(t>win[1]) continue;\n              long dep=Math.max(t,win[0]); long a2=dep+win[2];\n              if(arr<0||a2<arr) arr=a2;\n            }\n            if(arr<0||arr>dl) continue;\n            int nm=mask|(cap[v]&R);\n            long key=(long)v*(R+1)+nm;\n            Long cur=best.get(key);\n            if(cur==null||arr<cur){ best.put(key,arr); pq.add(new long[]{arr,v,nm}); }\n          }\n        }\n      }\n      sb.append(ans).append('\\n');\n    }\n    System.out.print(sb);\n  }\n}\nEOF\njavac -d /tmp /tmp/Brute.java && cat > /tmp/GenSmall.java <<'EOF'\nimport java.util.*;import java.io.*;\npublic class GenSmall{public static void main(String[] a)throws Exception{\n  long seed=Long.parseLong(a[0]); Random r=new Random(seed);\n  int N=1+r.nextInt(6), K=r.nextInt(4), M=1+r.nextInt(10), Q=5;\n  StringBuilder sb=new StringBuilder();\n  sb.append(N+\" \"+M+\" \"+K+\" \"+Q+\"\\n\");\n  int mm=(K==0)?1:(1<<K);\n  for(int i=1;i<=N;i++) sb.append(r.nextInt(mm)).append('\\n');\n  for(int e=0;e<M;e++){int u=1+r.nextInt(N),v=1+r.nextInt(N),w=1+r.nextInt(3);\n    sb.append(u+\" \"+v+\" \"+w+\"\\n\");\n    for(int j=0;j<w;j++){long o=r.nextInt(20);long c=o+r.nextInt(20);long l=1+r.nextInt(10);sb.append(o+\" \"+c+\" \"+l+\"\\n\");}}\n  for(int q=0;q<Q;q++){int s=1+r.nextInt(N),t=1+r.nextInt(N);long st=r.nextInt(20);long dl=st+r.nextInt(60);int R=(K==0)?0:r.nextInt(mm);\n    sb.append(s+\" \"+t+\" \"+st+\" \"+dl+\" \"+R+\"\\n\");}\n  System.out.print(sb);}}\nEOF\njavac -d /tmp /tmp/GenSmall.java\nfail=0\nfor i in $(seq 1 500); do\n  java -cp /tmp GenSmall $i > /tmp/small.txt\n  java -cp out TemporalDependencyRouter < /tmp/small.txt > /tmp/o1.txt\n  java -cp /tmp Brute /tmp/small.txt > /tmp/o2.txt\n  if ! diff -q /tmp/o1.txt /tmp/o2.txt >/dev/null; then echo \"MISMATCH seed $i\"; fail=1; cat /tmp/small.txt; echo \"got:\"; cat /tmp/o1.txt; echo \"exp:\"; cat /tmp/o2.txt; break; fi\ndone\n[ $fail -eq 0 ] && echo \"ALL 500 RANDOM CASES MATCH\""
+            },
+            "output": "Note: /tmp/Brute.java uses unchecked or unsafe operations.\nNote: Recompile with -Xlint:unchecked for details.\nALL 500 RANDOM CASES MATCH\n",
+            "metadata": {
+              "output": "Note: /tmp/Brute.java uses unchecked or unsafe operations.\nNote: Recompile with -Xlint:unchecked for details.\nALL 500 RANDOM CASES MATCH\n",
+              "exit": 0,
+              "truncated": false
+            },
+            "title": "cd /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm && cat > /tmp/Brute.java <<'EOF'\nimport java.util.*;\nimport java.io.*;\n// Brute force: Dijkstra over (node,mask) with a HashMap, no fancy pruning. Independent impl.\npublic class Brute {\n  public static void main(String[] x) throws Exception {\n    Scanner in=new Scanner(new File(x[0]));\n    int N=in.nextInt(),M=in.nextInt(),K=in.nextInt(),Q=in.nextInt();\n    int[] cap=new int[N+1];\n    for(int i=1;i<=N;i++) cap[i]=in.nextInt();\n    List<long[]>[] adj=new List[N+1];\n    for(int i=1;i<=N;i++) adj[i]=new ArrayList<>();\n    // store windows per edge: we keep list of edges each with windows\n    List<int[]>[] edgeList=new List[N+1];\n    for(int i=1;i<=N;i++) edgeList[i]=new ArrayList<>();\n    List<long[]> allWin=new ArrayList<>();\n    // represent: for node u, list of {v, winStart, winEnd}\n    List<long[]>[] E=new List[N+1];\n    for(int i=1;i<=N;i++) E[i]=new ArrayList<>();\n    for(int e=0;e<M;e++){\n      int u=in.nextInt(),v=in.nextInt(),w=in.nextInt();\n      int s=allWin.size();\n      for(int j=0;j<w;j++){ allWin.add(new long[]{in.nextLong(),in.nextLong(),in.nextLong()}); }\n      int en=allWin.size();\n      E[u].add(new long[]{v,s,en});\n    }\n    StringBuilder sb=new StringBuilder();\n    for(int q=0;q<Q;q++){\n      int src=in.nextInt(),tgt=in.nextInt(); long st=in.nextLong(),dl=in.nextLong(); int R=in.nextInt();\n      // dijkstra\n      HashMap<Long,Long> best=new HashMap<>();\n      PriorityQueue<long[]> pq=new PriorityQueue<>((a,b)->Long.compare(a[0],b[0]));\n      int sm=cap[src]&R;\n      long ans=-1;\n      if(st<=dl){\n        best.put((long)src*(R+1)+sm, st);\n        pq.add(new long[]{st,src,sm});\n        while(!pq.isEmpty()){\n          long[] top=pq.poll(); long t=top[0]; int node=(int)top[1]; int mask=(int)top[2];\n          if(t>dl){ break; }\n          Long b=best.get((long)node*(R+1)+mask);\n          if(b==null||b<t) continue;\n          if(node==tgt&&mask==R){ ans=t; break; }\n          for(long[] ed: E[node]){\n            int v=(int)ed[0]; int ws=(int)ed[1], we=(int)ed[2];\n            long arr=-1;\n            for(int wi=ws;wi<we;wi++){\n              long[] win=allWin.get(wi);\n              if(t>win[1]) continue;\n              long dep=Math.max(t,win[0]); long a2=dep+win[2];\n              if(arr<0||a2<arr) arr=a2;\n            }\n            if(arr<0||arr>dl) continue;\n            int nm=mask|(cap[v]&R);\n            long key=(long)v*(R+1)+nm;\n            Long cur=best.get(key);\n            if(cur==null||arr<cur){ best.put(key,arr); pq.add(new long[]{arr,v,nm}); }\n          }\n        }\n      }\n      sb.append(ans).append('\\n');\n    }\n    System.out.print(sb);\n  }\n}\nEOF\njavac -d /tmp /tmp/Brute.java && cat > /tmp/GenSmall.java <<'EOF'\nimport java.util.*;import java.io.*;\npublic class GenSmall{public static void main(String[] a)throws Exception{\n  long seed=Long.parseLong(a[0]); Random r=new Random(seed);\n  int N=1+r.nextInt(6), K=r.nextInt(4), M=1+r.nextInt(10), Q=5;\n  StringBuilder sb=new StringBuilder();\n  sb.append(N+\" \"+M+\" \"+K+\" \"+Q+\"\\n\");\n  int mm=(K==0)?1:(1<<K);\n  for(int i=1;i<=N;i++) sb.append(r.nextInt(mm)).append('\\n');\n  for(int e=0;e<M;e++){int u=1+r.nextInt(N),v=1+r.nextInt(N),w=1+r.nextInt(3);\n    sb.append(u+\" \"+v+\" \"+w+\"\\n\");\n    for(int j=0;j<w;j++){long o=r.nextInt(20);long c=o+r.nextInt(20);long l=1+r.nextInt(10);sb.append(o+\" \"+c+\" \"+l+\"\\n\");}}\n  for(int q=0;q<Q;q++){int s=1+r.nextInt(N),t=1+r.nextInt(N);long st=r.nextInt(20);long dl=st+r.nextInt(60);int R=(K==0)?0:r.nextInt(mm);\n    sb.append(s+\" \"+t+\" \"+st+\" \"+dl+\" \"+R+\"\\n\");}\n  System.out.print(sb);}}\nEOF\njavac -d /tmp /tmp/GenSmall.java\nfail=0\nfor i in $(seq 1 500); do\n  java -cp /tmp GenSmall $i > /tmp/small.txt\n  java -cp out TemporalDependencyRouter < /tmp/small.txt > /tmp/o1.txt\n  java -cp /tmp Brute /tmp/small.txt > /tmp/o2.txt\n  if ! diff -q /tmp/o1.txt /tmp/o2.txt >/dev/null; then echo \"MISMATCH seed $i\"; fail=1; cat /tmp/small.txt; echo \"got:\"; cat /tmp/o1.txt; echo \"exp:\"; cat /tmp/o2.txt; break; fi\ndone\n[ $fail -eq 0 ] && echo \"ALL 500 RANDOM CASES MATCH\"",
+            "time": {
+              "start": 1784038154240,
+              "end": 1784038154246
+            }
+          },
+          "metadata": {
+            "anthropic": {
+              "caller": {
+                "type": "direct"
+              }
+            }
+          },
+          "id": "prt_f60f3fc78001ZtWc6m3U2RXZ2d",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f3e8f5001lETD0jQkXtE2kc"
+        },
+        {
+          "reason": "tool-calls",
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-finish",
+          "tokens": {
+            "total": 34021,
+            "input": 2,
+            "output": 2400,
+            "reasoning": 0,
+            "cache": {
+              "write": 1426,
+              "read": 30193
+            }
+          },
+          "cost": 0.084019,
+          "id": "prt_f60f5e0250011Uf1x1PUYw6J4m",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f3e8f5001lETD0jQkXtE2kc"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_f60f03e7d001YA0KGfsuY1lXaV",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "variant": "high",
+        "path": {
+          "cwd": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm",
+          "root": "/home/ubuntu/codingBenchmarks"
+        },
+        "cost": 0.039307,
+        "tokens": {
+          "total": 34416,
+          "input": 2,
+          "output": 321,
+          "reasoning": 0,
+          "cache": {
+            "write": 2474,
+            "read": 31619
+          }
+        },
+        "modelID": "claude-opus-4-8",
+        "providerID": "anthropic",
+        "time": {
+          "created": 1784038154328,
+          "completed": 1784038160752
+        },
+        "finish": "tool-calls",
+        "id": "msg_f60f5e058001HH8HKyEhAOd37R",
+        "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC"
+      },
+      "parts": [
+        {
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-start",
+          "id": "prt_f60f5f47b001Rwn9fHeE2SZ4DP",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f5e058001HH8HKyEhAOd37R"
+        },
+        {
+          "type": "reasoning",
+          "text": "The validation passed across all 500 test cases, so the implementation is solid. Now I need to update the task list and write the final report to result.md. I'm going to clean up the workspace by removing the build artifacts directory to keep things tidy, then check what needs to be committed.",
+          "time": {
+            "start": 1784038159486,
+            "end": 1784038160568
+          },
+          "metadata": {
+            "anthropic": {
+              "signature": "Eo4GCokBCA8YAipAgqpji2VTde2zrxWSRN/f+E3iCmL2dF2ROLu0nzZunloflW5fbkCS8VCW7h/ev2w9BsAxuqXlZuv2ZXBqmUaq4zIPY2xhdWRlLW9wdXMtNC04OABCCHRoaW5raW5nWiQ3YzIzYjYxZS02YzYwLTQ4ZDAtODU1YS01NzZiN2RhZDcxMmQSDCh41ZfVXQsZtwFihhoMa9cRdyZUNiuiPjZdIjAdDFlbMOtXdU/WP3LOfCIr2hZqjgAMRFhou/H6e+PAaMqpSqh5nXcKRF96cuhPkPAqsQT2yLrFCbPwKpzeacEDqLJMo4bpS9n2naxD5/LlAtgf3UXArs9KaQtBY7d1GJGJor4cy1dzHM6lwFwKVmKDKpcjWTl9kqfUzIws8/Vt0HyOtLuDS8atjQFTYvck5gHhqZsmolocjbT+MGj4x+s0NswIg2xdgCcx2nfhueyI46bZoxghMQ1mDX2hmNbH3tOTVRrHNfJtQD+obXeNAg0HSc+vIryWCoPThqd/aBH3OPx+IumsBt/dYXVBl/OAppgzd0xhaqG0/v5dftumR96pFdHnjHE8lGIpSOSXAdo8mKVvwlOasV/ELQPyWl+IwZFmoGshPqfJO+isft5kKLdN91wW1oY5JbSR8ET93++Truza3AQoWpDoFlS0tS/Bz0udYVoA9NVJqsqtj8bZfLATK93VzKrPR9w3xz4pv1pCWW5BqMvVEnbNcDcLCA4XQxl4SZM7/td4KUi7Mi9vB2RAIS5dPINxVdfcDukVg8Z7QElkBoJN23zzabdb3jbYfIpXENTHT5+OUeb8FQPbIbtGY2laLBsqUa4po8/N3YexlqBakXxEWZrxH9dslCaHwMsks+bYvpoK/L086otWaR1/wDr/6Ym5ZjOD7KFjCww+fFe11KO/ynocWmrOT7ks1su3HC0A6LuY9PR0OIlM6F8JJo9yfaj6igYgQyFreE7XqF0Hrz0E9puDQrU/XyBVQnHLltI8tf6jCkmNjuWaNg6cJ4/nB2xV5Ow1soORmdQdS2116HkYAQ=="
+            }
+          },
+          "id": "prt_f60f5f47e0012i6OuCErRX5pJj",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f5e058001HH8HKyEhAOd37R"
+        },
+        {
+          "type": "text",
+          "text": "All 500 randomized cases match the independent brute-force solver. Let me clean build artifacts and write the report.",
+          "time": {
+            "start": 1784038160571,
+            "end": 1784038160574
+          },
+          "id": "prt_f60f5f8bb001jxpx4CokABCN5k",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f5e058001HH8HKyEhAOd37R"
+        },
+        {
+          "type": "tool",
+          "tool": "bash",
+          "callID": "toolu_013RSwQFkaUYgf1CoJqXuGcv",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cd /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm && rm -rf out && ls -R"
+            },
+            "output": ".:\nsrc\n\n./src:\nmain\ntest\n\n./src/main:\njava\n\n./src/main/java:\nTemporalDependencyRouter.java\n\n./src/test:\njava\n\n./src/test/java:\nTemporalDependencyRouterTest.java\n",
+            "metadata": {
+              "output": ".:\nsrc\n\n./src:\nmain\ntest\n\n./src/main:\njava\n\n./src/main/java:\nTemporalDependencyRouter.java\n\n./src/test:\njava\n\n./src/test/java:\nTemporalDependencyRouterTest.java\n",
+              "exit": 0,
+              "truncated": false
+            },
+            "title": "cd /home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm && rm -rf out && ls -R",
+            "time": {
+              "start": 1784038160689,
+              "end": 1784038160693
+            }
+          },
+          "metadata": {
+            "anthropic": {
+              "caller": {
+                "type": "direct"
+              }
+            }
+          },
+          "id": "prt_f60f5f8c0001OT7kn2lncXt3U0",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f5e058001HH8HKyEhAOd37R"
+        },
+        {
+          "reason": "tool-calls",
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-finish",
+          "tokens": {
+            "total": 34416,
+            "input": 2,
+            "output": 321,
+            "reasoning": 0,
+            "cache": {
+              "write": 2474,
+              "read": 31619
+            }
+          },
+          "cost": 0.039307,
+          "id": "prt_f60f5f9590014gPCr7APrDCgC2",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f5e058001HH8HKyEhAOd37R"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_f60f03e7d001YA0KGfsuY1lXaV",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "variant": "high",
+        "path": {
+          "cwd": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm",
+          "root": "/home/ubuntu/codingBenchmarks"
+        },
+        "cost": 0.02433775,
+        "tokens": {
+          "total": 34687,
+          "input": 2,
+          "output": 191,
+          "reasoning": 0,
+          "cache": {
+            "write": 401,
+            "read": 34093
+          }
+        },
+        "modelID": "claude-opus-4-8",
+        "providerID": "anthropic",
+        "time": {
+          "created": 1784038160757,
+          "completed": 1784038163657
+        },
+        "finish": "tool-calls",
+        "id": "msg_f60f5f975001VltiYbI6oDC7D6",
+        "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC"
+      },
+      "parts": [
+        {
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-start",
+          "id": "prt_f60f6002f001KlEIVCyISThaa3",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f5f975001VltiYbI6oDC7D6"
+        },
+        {
+          "type": "tool",
+          "tool": "todowrite",
+          "callID": "toolu_012HNGobj2NFTRgADp9vUPs3",
+          "state": {
+            "status": "completed",
+            "input": {
+              "todos": [
+                {
+                  "content": "Implement TemporalDependencyRouter.java",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "Write JUnit-style/main-based test with sample",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "Compile and run against sample + edge cases",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "Write result.md report",
+                  "status": "in_progress",
+                  "priority": "medium"
+                }
+              ]
+            },
+            "output": "[\n  {\n    \"content\": \"Implement TemporalDependencyRouter.java\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Write JUnit-style/main-based test with sample\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Compile and run against sample + edge cases\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Write result.md report\",\n    \"status\": \"in_progress\",\n    \"priority\": \"medium\"\n  }\n]",
+            "metadata": {
+              "todos": [
+                {
+                  "content": "Implement TemporalDependencyRouter.java",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "Write JUnit-style/main-based test with sample",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "Compile and run against sample + edge cases",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "Write result.md report",
+                  "status": "in_progress",
+                  "priority": "medium"
+                }
+              ],
+              "truncated": false
+            },
+            "title": "1 todos",
+            "time": {
+              "start": 1784038163599,
+              "end": 1784038163602
+            }
+          },
+          "metadata": {
+            "anthropic": {
+              "caller": {
+                "type": "direct"
+              }
+            }
+          },
+          "id": "prt_f60f60032001z0UdBwT8FsBHRx",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f5f975001VltiYbI6oDC7D6"
+        },
+        {
+          "reason": "tool-calls",
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-finish",
+          "tokens": {
+            "total": 34687,
+            "input": 2,
+            "output": 191,
+            "reasoning": 0,
+            "cache": {
+              "write": 401,
+              "read": 34093
+            }
+          },
+          "cost": 0.02433775,
+          "id": "prt_f60f604a3001Y3itApETarf3mb",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f5f975001VltiYbI6oDC7D6"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_f60f03e7d001YA0KGfsuY1lXaV",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "variant": "high",
+        "path": {
+          "cwd": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm",
+          "root": "/home/ubuntu/codingBenchmarks"
+        },
+        "cost": 0.08363825,
+        "tokens": {
+          "total": 37434,
+          "input": 2,
+          "output": 2561,
+          "reasoning": 0,
+          "cache": {
+            "write": 377,
+            "read": 34494
+          }
+        },
+        "modelID": "claude-opus-4-8",
+        "providerID": "anthropic",
+        "time": {
+          "created": 1784038163662,
+          "completed": 1784038199910
+        },
+        "finish": "tool-calls",
+        "id": "msg_f60f604ce001fbdMHd07sTbnTW",
+        "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC"
+      },
+      "parts": [
+        {
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-start",
+          "id": "prt_f60f60cd1001xDv8pWqLKwzJPi",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f604ce001fbdMHd07sTbnTW"
+        },
+        {
+          "type": "tool",
+          "tool": "write",
+          "callID": "toolu_01HvWT6vNRMuasGi9v6S7LKe",
+          "state": {
+            "status": "completed",
+            "input": {
+              "filePath": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/result.md",
+              "content": "# Algorithm Task 001: Temporal Dependency Router — Result\n\n## Final Status\n\n**COMPLETE.** A standalone JDK 17 Java solution is implemented, tested against the provided\nsample, an extensive edge-case suite, a large performance stress, and validated for correctness\nagainst an independent brute-force solver over 500 randomized inputs (all matched).\n\n## Summary of Work\n\nImplemented `TemporalDependencyRouter`, a command-line program that reads the specified input\nformat from stdin and prints one earliest-arrival time (or `-1`) per query to stdout. The core is a\nper-query, time-ordered label-setting search (Dijkstra variant) over states `(node, capabilityMask)`\nwith capability projection and superset-dominance pruning.\n\n## Files Changed / Added\n\n- `workspace/algorithm/src/main/java/TemporalDependencyRouter.java` — main implementation\n  (public final class, `main`, plus package-private `Solver` and `FastReader` helpers in the same\n  file).\n- `workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java` — standalone test harness\n  (no external framework); redirects stdin/stdout into `main` and compares output. Exits non-zero on\n  any failure.\n\nNo files outside this task directory were modified.\n\n## Approach and Reasoning\n\n- **State space.** A route's validity depends on accumulated capabilities intersected with the\n  query's `requiredCapabilityMask`. Only bits present in the required mask can ever matter, so\n  masks are projected onto the required mask. This collapses the state space to\n  `node × 2^popcount(requiredMask)` and makes `requiredMask` satisfaction equivalent to reaching\n  `mask == requiredMask`.\n- **Search.** A Dijkstra-style search ordered by arrival time. The first time a label\n  `(target, requiredMask)` is popped, it is the earliest valid arrival (times are monotonic non-\n  decreasing as popped). If the smallest time in the frontier ever exceeds the deadline, the search\n  stops early and returns `-1`.\n- **Edge windows.** For departing at current time `t`, the earliest arrival over an edge is the\n  minimum over its windows of `max(t, openTime) + latency`, restricted to windows with\n  `t <= closeTime`. Waiting for a future window is handled naturally by `max(t, openTime)`.\n  Multiple windows per edge and multiple parallel edges between the same pair are handled by simply\n  taking the minimum arrival across all of them.\n- **Dominance pruning.** For each node a small list of `(mask, time)` labels is kept. A new label is\n  discarded if the node already holds a superset-mask label with time `≤` the new time; conversely,\n  inserting a new label removes any stored labels it dominates. This aggressively bounds the number\n  of live labels and is what keeps the dense/high-capability worst case tractable.\n- **Performance engineering.** Hand-rolled byte-level long parser; CSR adjacency; a manual binary\n  heap over primitive `long[]` arrays (no per-state object allocation in the hot loop); per-query\n  scratch structures reset in O(1) via a generation stamp so large arrays are not re-zeroed each\n  query. All time arithmetic uses `long`. The search is iterative (no recursion), so there is no\n  stack-overflow risk.\n\n### Edge cases explicitly handled and tested\n\nSource equals target (already satisfied, and requiring a round-trip to collect capabilities),\nrequired capabilities already satisfied at source, waiting for a future window, multiple windows per\nedge, multiple/parallel edges, expired windows, deadline exactly equal to arrival (accepted),\ndeadline just below arrival (rejected), capability mask `0`, unreachable target, `startTime`\nexceeding deadline, and the \"weaker-but-earlier vs stronger-but-later\" tradeoff.\n\n## Algorithmic Complexity\n\nLet `R` be a query's required mask and `P = popcount(R)`. Per query the state space is\n`O(N · 2^P)` and each state relaxes its outgoing edges (each with its windows). With dominance\npruning the practical work is far below the theoretical bound. Worst-case time per query is\n`O((N·2^P + E·2^P·Wavg) · log(states))`; space is `O(states + windows)`. Because `K ≤ 12`,\n`2^P ≤ 4096`; most realistic queries carry small required masks and terminate quickly, and the\nearly deadline cutoff prunes further. Input parsing and graph construction are `O(N + M + totalWindows)`.\n\n## Commands Run and Outcomes\n\n- `javac -d out src/main/java/TemporalDependencyRouter.java src/test/java/TemporalDependencyRouterTest.java`\n  — compiled cleanly (JDK 17).\n- `java -cp out TemporalDependencyRouterTest` — **12/12 tests passed**, including the exact sample\n  (`10 / 14 / 25`).\n- Large stress: generated `N=100000, M=300000, K=12, Q=100000, ~600000 windows`\n  (constraint-max). Ran in **~0.31 s**, peak RSS **~97 MB**, exit 0, 100000 output lines.\n- Dense/high-capability stress: `N=2000, M=30000, Q=2000`, every query using the full 12-bit mask\n  `4095` with generous deadlines. Ran in **~1.63 s**, peak RSS **~47 MB**, exit 0.\n- Differential correctness: an independent `HashMap`-based brute-force Dijkstra was run against the\n  main solver on **500 randomized small inputs**; **all outputs matched**.\n\n## Self-Assessed Rating\n\n9/10. Correctness is strongly validated (sample + broad edge cases + 500-case differential fuzzing)\nand performance comfortably meets the stated large-input expectations in the tested workloads. A\npoint is withheld because an adversarially constructed instance (very dense connectivity combined\nwith maximal `popcount(R)=12` masks and long feasible deadlines across all 100000 queries) could\nstill stress the `node × 2^P` state space beyond the tested envelope; the dominance pruning mitigates\nbut does not asymptotically eliminate this theoretical worst case.\n\n## Token Usage / Cost\n\nExact token usage and cost were not exposed to the agent by the runtime, so precise figures are\nunavailable. Rough order-of-magnitude for this session: on the order of ~60–90K total tokens across\nprompt reading, implementation, testing, and reporting. At Claude Opus-class pricing this corresponds\nto an estimated cost on the order of a few US dollars. These are estimates only; treat as\napproximate.\n\n## Notes / Limitations\n\n- Output uses `\\n` line endings and a single buffered write for throughput.\n- The reader parses signed decimal integers; the format specifies non-negative values, which is\n  fully supported (and negatives would also parse).\n- No third-party libraries or build tools are required; the code compiles and runs with plain\n  `javac`/`java` on JDK 17. The test harness is intentionally framework-free.\n- The dominance-pruning worst case noted in the rating is the main theoretical limitation; all\n  tested realistic and near-max-constraint workloads completed well within a second or two.\n"
+            },
+            "output": "Wrote file successfully.",
+            "metadata": {
+              "diagnostics": {},
+              "filepath": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/result.md",
+              "exists": true,
+              "truncated": false
+            },
+            "title": "models/CASSANDRA/01_algorithm/task_001/result.md",
+            "time": {
+              "start": 1784038199782,
+              "end": 1784038199791
+            }
+          },
+          "metadata": {
+            "anthropic": {
+              "caller": {
+                "type": "direct"
+              }
+            }
+          },
+          "id": "prt_f60f60cd3001UXygePphpVvV6p",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f604ce001fbdMHd07sTbnTW"
+        },
+        {
+          "reason": "tool-calls",
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-finish",
+          "tokens": {
+            "total": 37434,
+            "input": 2,
+            "output": 2561,
+            "reasoning": 0,
+            "cache": {
+              "write": 377,
+              "read": 34494
+            }
+          },
+          "cost": 0.08363825,
+          "id": "prt_f60f6924a001gQJ08t3Eb89xYr",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f604ce001fbdMHd07sTbnTW"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_f60f03e7d001YA0KGfsuY1lXaV",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "variant": "high",
+        "path": {
+          "cwd": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm",
+          "root": "/home/ubuntu/codingBenchmarks"
+        },
+        "cost": 0.03826425,
+        "tokens": {
+          "total": 37637,
+          "input": 2,
+          "output": 189,
+          "reasoning": 0,
+          "cache": {
+            "write": 2575,
+            "read": 34871
+          }
+        },
+        "modelID": "claude-opus-4-8",
+        "providerID": "anthropic",
+        "time": {
+          "created": 1784038199914,
+          "completed": 1784038209197
+        },
+        "finish": "tool-calls",
+        "id": "msg_f60f6926a001B2PMaHCdCryf66",
+        "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC"
+      },
+      "parts": [
+        {
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-start",
+          "id": "prt_f60f6b248001qr352faJRDezKo",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f6926a001B2PMaHCdCryf66"
+        },
+        {
+          "type": "tool",
+          "tool": "todowrite",
+          "callID": "toolu_01JQdbEq1dhwQTmGG3kcp5bp",
+          "state": {
+            "status": "completed",
+            "input": {
+              "todos": [
+                {
+                  "content": "Implement TemporalDependencyRouter.java",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "Write JUnit-style/main-based test with sample",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "Compile and run against sample + edge cases",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "Write result.md report",
+                  "status": "completed",
+                  "priority": "medium"
+                }
+              ]
+            },
+            "output": "[\n  {\n    \"content\": \"Implement TemporalDependencyRouter.java\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Write JUnit-style/main-based test with sample\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Compile and run against sample + edge cases\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Write result.md report\",\n    \"status\": \"completed\",\n    \"priority\": \"medium\"\n  }\n]",
+            "metadata": {
+              "todos": [
+                {
+                  "content": "Implement TemporalDependencyRouter.java",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "Write JUnit-style/main-based test with sample",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "Compile and run against sample + edge cases",
+                  "status": "completed",
+                  "priority": "high"
+                },
+                {
+                  "content": "Write result.md report",
+                  "status": "completed",
+                  "priority": "medium"
+                }
+              ],
+              "truncated": false
+            },
+            "title": "0 todos",
+            "time": {
+              "start": 1784038209144,
+              "end": 1784038209148
+            }
+          },
+          "metadata": {
+            "anthropic": {
+              "caller": {
+                "type": "direct"
+              }
+            }
+          },
+          "id": "prt_f60f6b24a001JsxdnCt1AVjZ71",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f6926a001B2PMaHCdCryf66"
+        },
+        {
+          "reason": "tool-calls",
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-finish",
+          "tokens": {
+            "total": 37637,
+            "input": 2,
+            "output": 189,
+            "reasoning": 0,
+            "cache": {
+              "write": 2575,
+              "read": 34871
+            }
+          },
+          "cost": 0.03826425,
+          "id": "prt_f60f6b696001dYPHls3nUQfUHq",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f6926a001B2PMaHCdCryf66"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_f60f03e7d001YA0KGfsuY1lXaV",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "variant": "high",
+        "path": {
+          "cwd": "/home/ubuntu/codingBenchmarks/models/CASSANDRA/01_algorithm/task_001/workspace/algorithm",
+          "root": "/home/ubuntu/codingBenchmarks"
+        },
+        "cost": 0.03626425,
+        "tokens": {
+          "total": 38429,
+          "input": 2,
+          "output": 608,
+          "reasoning": 0,
+          "cache": {
+            "write": 373,
+            "read": 37446
+          }
+        },
+        "modelID": "claude-opus-4-8",
+        "providerID": "anthropic",
+        "time": {
+          "created": 1784038209201,
+          "completed": 1784038234242
+        },
+        "finish": "stop",
+        "id": "msg_f60f6b6b1001x4Jof4dbucxqzk",
+        "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC"
+      },
+      "parts": [
+        {
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-start",
+          "id": "prt_f60f6fa2f001sQjEf412EDl1Zh",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f6b6b1001x4Jof4dbucxqzk"
+        },
+        {
+          "type": "text",
+          "text": "Task complete.\n\n## Summary\n\nImplemented a standalone JDK 17 solution for the Temporal Dependency Router problem.\n\n**Files created:**\n- `workspace/algorithm/src/main/java/TemporalDependencyRouter.java` — implementation\n- `workspace/algorithm/src/test/java/TemporalDependencyRouterTest.java` — framework-free test harness\n- `result.md` — full report (at `../../result.md`)\n\n**Approach:** Per-query time-ordered Dijkstra over `(node, capabilityMask)` states. Capability masks are projected onto each query's required mask (so state space is `node × 2^popcount(R)`), with superset-dominance pruning to keep live labels bounded. Edge windows are resolved as `min over windows of max(t, open) + latency` for windows with `t ≤ close`. Engineering: hand-rolled byte parser, CSR adjacency, manual primitive-array binary heap (no per-state allocation), generation-stamped O(1) per-query buffer reset, all-`long` arithmetic, fully iterative (no recursion).\n\n**Verification:**\n- Sample passes exactly (`10 / 14 / 25`); 12/12 edge-case tests pass.\n- Differential fuzzing against an independent brute-force solver: 500/500 randomized cases match.\n- Max-constraint stress (`N=100k, M=300k, K=12, Q=100k, ~600k windows`): ~0.31s, ~97MB.\n- Dense full-12-bit-mask stress (`N=2000, M=30k, Q=2000`): ~1.63s, ~47MB.\n\n**Token usage/cost:** not exposed by the runtime; estimated ~60–90K tokens (a few USD at Opus-class pricing) — approximate only, noted as such in `result.md`.",
+          "time": {
+            "start": 1784038226481,
+            "end": 1784038233996
+          },
+          "id": "prt_f60f6fa31001ZpfDfFM3pmWW45",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f6b6b1001x4Jof4dbucxqzk"
+        },
+        {
+          "reason": "stop",
+          "snapshot": "8049ad8eb3aa14a1f5e1e1253b11d04b91a85c57",
+          "type": "step-finish",
+          "tokens": {
+            "total": 38429,
+            "input": 2,
+            "output": 608,
+            "reasoning": 0,
+            "cache": {
+              "write": 373,
+              "read": 37446
+            }
+          },
+          "cost": 0.03626425,
+          "id": "prt_f60f71861001s3QSj5aTdpHbrV",
+          "sessionID": "ses_09f0fc194ffeeVbqpM9GPZGMjC",
+          "messageID": "msg_f60f6b6b1001x4Jof4dbucxqzk"
+        }
+      ]
+    }
+  ]
+}
