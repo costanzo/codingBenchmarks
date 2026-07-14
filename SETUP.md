@@ -7,7 +7,7 @@ The benchmark contract is:
 - Repository under test: Keycloak from GitHub
 - Language/runtime target: Java with JDK 17
 - Build tool: Maven
-- Coding agent: OpenCode
+- Coding agents: OpenCode and Codex
 - Work layout: one Keycloak git worktree per model per Keycloak-based task under `models/<MODEL_CODE>/<CATEGORY>/<TASK_ID>/workspace/keycloak/`. The `01_algorithm/task_001` task is standalone and uses `workspace/algorithm/`.
 
 ## 1. System Packages
@@ -147,7 +147,40 @@ Inside the OpenCode TUI, use:
 
 Follow the provider login/API-key flow for the model you want to evaluate.
 
-## 6. Clone The Benchmark Repo
+
+## 6. Codex CLI
+
+Install Codex CLI using the official macOS/Linux standalone installer:
+
+```bash
+curl -fsSL https://chatgpt.com/codex/install.sh | sh
+```
+
+If you prefer to inspect the installer before running it:
+
+```bash
+curl -fsSL https://chatgpt.com/codex/install.sh -o /tmp/codex-install.sh
+less /tmp/codex-install.sh
+sh /tmp/codex-install.sh
+```
+
+Restart your shell or reload your profile if the installer updates your `PATH`.
+
+Verify:
+
+```bash
+codex --version
+```
+
+Launch Codex once and sign in with the account that has access to the model you want to evaluate:
+
+```bash
+codex
+```
+
+Use Codex from inside the model/task worktree, the same way as OpenCode. Keep real model names private in benchmark reports; use only the Greek model code such as `CASSANDRA` or `MEDEA`.
+
+## 7. Clone The Benchmark Repo
 
 Clone this benchmark repository:
 
@@ -162,7 +195,7 @@ Check the expected model/task structure:
 tree -L 5 models
 ```
 
-## 7. Clone Keycloak Once
+## 8. Clone Keycloak Once
 
 Keep one canonical Keycloak clone under `upstream/keycloak`. It is used only as the source repository for worktrees.
 
@@ -185,7 +218,7 @@ echo "$BASE_BRANCH $BASE_COMMIT"
 
 For a fair run, every model and task must use the same `BASE_BRANCH` and `BASE_COMMIT`.
 
-## 8. Create Per-Model Per-Task Worktrees
+## 9. Create Per-Model Per-Task Worktrees
 
 From `upstream/keycloak`, create one worktree per model/task. Example for `CASSANDRA` bug-fix task:
 
@@ -220,7 +253,7 @@ Use this worktree path pattern:
 models/<MODEL_CODE>/<CATEGORY>/<TASK_ID>/workspace/keycloak
 ```
 
-## 9. Run A Coding Agent For A Task
+## 10. Run A Coding Agent For A Task
 
 Open a model/task worktree:
 
@@ -232,6 +265,12 @@ Start OpenCode:
 
 ```bash
 opencode
+```
+
+Or start Codex:
+
+```bash
+codex
 ```
 
 Prompt example:
@@ -246,7 +285,7 @@ The coding agent should edit files in `workspace/keycloak/`. The final benchmark
 models/CASSANDRA/02_bug_fix/task_001/result.md
 ```
 
-## 10. Capture Results
+## 11. Capture Results
 
 After a model finishes a task, inspect:
 
@@ -285,7 +324,7 @@ Overall: 4.0 / 5
 Short evaluator notes.
 ```
 
-## 11. Useful Keycloak Commands
+## 12. Useful Keycloak Commands
 
 The coding agent may choose which commands to run. Useful commands often include:
 
@@ -297,7 +336,7 @@ The coding agent may choose which commands to run. Useful commands often include
 
 Keycloak is large, so prefer targeted module builds/tests over full-repo builds unless the task needs broader verification.
 
-## 12. Cleanup Worktrees
+## 13. Cleanup Worktrees
 
 When a benchmark run is over and results are saved, remove a worktree from the canonical Keycloak clone:
 
@@ -312,7 +351,7 @@ If Git reports stale metadata:
 git worktree prune
 ```
 
-## 13. Troubleshooting
+## 14. Troubleshooting
 
 Check Java selection:
 
@@ -344,6 +383,8 @@ du -sh upstream/keycloak models ~/.m2 2>/dev/null
 
 - OpenCode docs: https://opencode.ai/docs/
 - OpenCode install script: https://opencode.ai/install
+- Codex CLI docs: https://developers.openai.com/codex/cli/
+- Codex CLI installer: https://chatgpt.com/codex/install.sh
 - Keycloak GitHub repository: https://github.com/keycloak/keycloak
 
 
