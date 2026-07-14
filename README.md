@@ -26,6 +26,17 @@ Initial model codes:
 
 Do not put real model names in public reports. Keep any real model mapping private.
 
+## Pricing
+
+Pricing is part of the final comparison. Store public rate-card data in `models/<MODEL_CODE>/model.yaml` and keep real model names private.
+
+| Model | Input / MTok | Output / MTok | Cache Write / MTok | Cache Hit / MTok |
+| --- | ---: | ---: | ---: | ---: |
+| CASSANDRA | $5.00 | $25.00 | $6.25 | $0.50 |
+| MEDEA | $1.25 | $4.25 | `n/a` | `n/a` |
+
+Task reports should include input, output, cache-write, cache-hit, total tokens, and estimated cost when available. If cache token counts are unavailable, mark them `unknown` rather than assuming zero.
+
 ## Directory Structure
 
 ```text

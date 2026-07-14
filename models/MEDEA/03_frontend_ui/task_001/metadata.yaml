@@ -82,7 +82,7 @@ result_contract:
     - UI States and Validation
     - Tests and Verification
     - Limitations
-    - Token Usage
+    - Token Usage And Cost Inputs
 
 reporting:
   include_in_leaderboard: true

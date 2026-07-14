@@ -119,5 +119,5 @@ When finished, update `result.md` with:
 - compatibility/regression analysis
 - files inspected
 - overall risk assessment
-- token usage if available
+- token usage and estimated cost if available
 - notes or limitations

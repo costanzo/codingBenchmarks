@@ -28,11 +28,16 @@ Overall Score: not_graded / 5
 - Reasoning: not_graded / 5
 - Report Quality: not_graded / 5
 
-## Token Usage
+## Token Usage And Cost Inputs
 
 - input_tokens: unknown
 - output_tokens: unknown
+- cache_write_tokens: unknown
+- cache_hit_tokens: unknown
 - total_tokens: unknown
+- estimated_cost_usd: unknown
+
+Use the model pricing in `models/<MODEL_CODE>/model.yaml` when estimating cost. If cache token counts are unavailable, write `unknown` and explain the limitation in Notes.
 
 ## Notes
 

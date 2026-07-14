@@ -217,6 +217,6 @@ When finished, update `result.md` with:
 - algorithmic complexity
 - commands run and outcomes, if any
 - self-assessed rating if requested
-- token usage if available
+- token usage and estimated cost if available
 - notes or limitations
 

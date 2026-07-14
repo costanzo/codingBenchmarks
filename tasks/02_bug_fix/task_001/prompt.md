@@ -121,7 +121,7 @@ When finished, update `result.md` with:
 - commands run and outcomes, if any
 - remaining risks or limitations
 - self-assessed rating if requested
-- token usage if available
+- token usage and estimated cost if available
 - notes
 
 

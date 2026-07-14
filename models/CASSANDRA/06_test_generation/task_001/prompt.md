@@ -95,4 +95,4 @@ When finished, update `result.md` with:
 - explanation if exact 90% coverage could not be measured
 - production code changes, if any, and why they preserve behavior
 - known limitations or follow-up work
-- token usage if available
+- token usage and estimated cost if available

@@ -39,7 +39,7 @@ Your `result.md` report must include:
 - files inspected
 - commands run, if any
 - limitations or uncertain areas
-- token usage if available
+- token usage and estimated cost if available
 
 ## Required Topics
 

@@ -12,6 +12,7 @@
 | Evaluation date | `<yyyy-mm-dd>` |
 | Evaluator | `<name>` |
 | Models evaluated | `CASSANDRA`, `MEDEA` |
+| Pricing included | Yes; see model rate cards and cost-efficiency section |
 | Score scale | 1.0 to 5.0, half-point increments |
 
 ## 2. Executive Summary
@@ -30,10 +31,10 @@ Example:
 
 ## 3. Overall Leaderboard
 
-| Rank | Model | Overall Score | Completed Tasks | Failed / Incomplete Tasks | High-Level Assessment |
-| ---: | --- | ---: | ---: | ---: | --- |
-| 1 | CASSANDRA | `<avg>` / 5 | `<n>` | `<n>` | `<short summary>` |
-| 2 | MEDEA | `<avg>` / 5 | `<n>` | `<n>` | `<short summary>` |
+| Rank | Model | Overall Score | Completed Tasks | Failed / Incomplete Tasks | Total Estimated Cost | Avg Cost / Task | Score / Dollar | High-Level Assessment |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 1 | CASSANDRA | `<avg>` / 5 | `<n>` | `<n>` | `$<cost>` | `$<cost>` | `<score_per_dollar>` | `<short summary>` |
+| 2 | MEDEA | `<avg>` / 5 | `<n>` | `<n>` | `$<cost>` | `$<cost>` | `<score_per_dollar>` | `<short summary>` |
 
 ## 4. Category Score Matrix
 
@@ -42,9 +43,54 @@ Example:
 | CASSANDRA | `<score>` | `<score>` | `<score>` | `<score>` | `<score>` | `<score>` | `<avg>` |
 | MEDEA | `<score>` | `<score>` | `<score>` | `<score>` | `<score>` | `<score>` | `<avg>` |
 
-## 5. Category-by-Category Comparison
+## 5. Pricing And Cost Efficiency
 
-### 5.1 Algorithm
+### 5.1 Model Rate Cards
+
+Rates are in USD per 1 million tokens. Keep real model names private; only use model codes in this public report.
+
+| Model | Input / MTok | Output / MTok | Cache Write / MTok | Cache Hit / MTok | Notes |
+| --- | ---: | ---: | ---: | ---: | --- |
+| CASSANDRA | $5.00 | $25.00 | $6.25 | $0.50 | Cache pricing is included when cache token counts are available. |
+| MEDEA | $1.25 | $4.25 | `n/a` | `n/a` | Cache pricing was not provided; treat cache fields as unknown unless a private run log supplies them. |
+
+### 5.2 Cost Formula
+
+For each model/task, estimate cost with:
+
+```text
+cost_usd = (input_tokens / 1_000_000 * input_rate)
+         + (output_tokens / 1_000_000 * output_rate)
+         + (cache_write_tokens / 1_000_000 * cache_write_rate, if available)
+         + (cache_hit_tokens / 1_000_000 * cache_hit_rate, if available)
+```
+
+If cache usage is unavailable, calculate the known non-cache cost and mark cache cost as `unknown`, not zero.
+
+### 5.3 Cost Matrix
+
+| Model | Algorithm | Bug Fix | Frontend UI | PR Review | Code Analysis | Test Generation | Total Cost |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| CASSANDRA | `$<cost>` | `$<cost>` | `$<cost>` | `$<cost>` | `$<cost>` | `$<cost>` | `$<total>` |
+| MEDEA | `$<cost>` | `$<cost>` | `$<cost>` | `$<cost>` | `$<cost>` | `$<cost>` | `$<total>` |
+
+### 5.4 Cost-Quality Comparison
+
+| Model | Average Score | Total Cost | Completed Tasks | Avg Cost / Completed Task | Score / Dollar | Cost-Adjusted Assessment |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| CASSANDRA | `<avg>` / 5 | `$<cost>` | `<n>` | `$<cost>` | `<score_per_dollar>` | `<quality vs cost notes>` |
+| MEDEA | `<avg>` / 5 | `$<cost>` | `<n>` | `$<cost>` | `<score_per_dollar>` | `<quality vs cost notes>` |
+
+**Comparison Notes**
+
+- Quality premium: `<whether a higher-cost model delivered enough quality to justify the price>`
+- Cost efficiency: `<which model produced better score per dollar>`
+- Token profile: `<which tasks consumed the most input, output, or cache tokens>`
+- Practical recommendation: `<best model when optimizing for quality, cost, or balanced value>`
+
+## 6. Category-by-Category Comparison
+
+### 6.1 Algorithm
 
 **Winner:** `<CASSANDRA | MEDEA | Tie>`
 
@@ -61,7 +107,7 @@ Example:
 - Reasoning quality: `<clarity of explanation, assumptions, tradeoffs>`
 - Main differentiator: `<one or two concrete reasons for score gap>`
 
-### 5.2 Bug Fix
+### 6.2 Bug Fix
 
 **Winner:** `<CASSANDRA | MEDEA | Tie>`
 
@@ -78,7 +124,7 @@ Example:
 - Evidence: `<commands run, tests mentioned, diffs reviewed>`
 - Main differentiator: `<why one model scored higher>`
 
-### 5.3 Frontend UI
+### 6.3 Frontend UI
 
 **Winner:** `<CASSANDRA | MEDEA | Tie>`
 
@@ -95,7 +141,7 @@ Example:
 - Risk: `<visual regressions, brittle state handling, missing tests>`
 - Main differentiator: `<why the winner won>`
 
-### 5.4 PR Review
+### 6.4 PR Review
 
 **Winner:** `<CASSANDRA | MEDEA | Tie>`
 
@@ -112,7 +158,7 @@ Example:
 - False positives: `<unsubstantiated or incorrect claims>`
 - Main differentiator: `<depth, precision, severity judgment>`
 
-### 5.5 Code Analysis
+### 6.5 Code Analysis
 
 **Winner:** `<CASSANDRA | MEDEA | Tie>`
 
@@ -129,7 +175,7 @@ Example:
 - Specific code references: `<file/class/method grounding>`
 - Main differentiator: `<why scores differ>`
 
-### 5.6 Test Generation
+### 6.6 Test Generation
 
 **Winner:** `<CASSANDRA | MEDEA | Tie>`
 
@@ -146,11 +192,11 @@ Example:
 - Maintainability: `<readability, brittleness, test data setup>`
 - Main differentiator: `<why one model’s tests are more valuable>`
 
-## 6. Task-Level Evidence
+## 7. Task-Level Evidence
 
 Use this section to record concrete evidence from each task. Link or reference the task folder, result report, branch, and notable files changed.
 
-### 6.1 CASSANDRA
+### 7.1 CASSANDRA
 
 #### 01_algorithm / task_001
 
@@ -161,6 +207,11 @@ Use this section to record concrete evidence from each task. Link or reference t
 | Score file | `models/CASSANDRA/01_algorithm/task_001/score.md` |
 | Overall score | `<score>` / 5 |
 | Status | `<completed | partial | failed>` |
+| Input tokens | `<n | unknown>` |
+| Output tokens | `<n | unknown>` |
+| Cache write tokens | `<n | unknown>` |
+| Cache hit tokens | `<n | unknown>` |
+| Estimated cost | `$<cost | unknown>` |
 
 **Files Changed**
 
@@ -180,13 +231,13 @@ Use this section to record concrete evidence from each task. Link or reference t
 
 Repeat this subsection for each task.
 
-### 6.2 MEDEA
+### 7.2 MEDEA
 
 Repeat the same structure for MEDEA.
 
-## 7. Direct Model-vs-Model Findings
+## 8. Direct Model-vs-Model Findings
 
-### 7.1 Strengths Comparison
+### 8.1 Strengths Comparison
 
 | Area | CASSANDRA | MEDEA | Better |
 | --- | --- | --- | --- |
@@ -198,7 +249,7 @@ Repeat the same structure for MEDEA.
 | Report clarity | `<notes>` | `<notes>` | `<model>` |
 | Command usage discipline | `<notes>` | `<notes>` | `<model>` |
 
-### 7.2 Failure Mode Comparison
+### 8.2 Failure Mode Comparison
 
 | Failure Mode | CASSANDRA | MEDEA | Notes |
 | --- | --- | --- | --- |
@@ -209,16 +260,16 @@ Repeat the same structure for MEDEA.
 | Poor report detail | `<yes/no/examples>` | `<yes/no/examples>` | `<notes>` |
 | Incomplete task | `<yes/no/examples>` | `<yes/no/examples>` | `<notes>` |
 
-### 7.3 Reliability Assessment
+### 8.3 Reliability Assessment
 
 | Model | Reliability Rating | Evidence |
 | --- | ---: | --- |
 | CASSANDRA | `<score>` / 5 | `<consistency across tasks, build/test behavior, report honesty>` |
 | MEDEA | `<score>` / 5 | `<consistency across tasks, build/test behavior, report honesty>` |
 
-## 8. Score Rationale
+## 9. Score Rationale
 
-### 8.1 Scoring Scale
+### 9.1 Scoring Scale
 
 | Score | Meaning |
 | ---: | --- |
@@ -230,7 +281,7 @@ Repeat the same structure for MEDEA.
 
 Half-points indicate performance between two adjacent levels.
 
-### 8.2 Score Dimensions
+### 9.2 Score Dimensions
 
 | Dimension | Weight | What It Measures |
 | --- | ---: | --- |
@@ -240,7 +291,7 @@ Half-points indicate performance between two adjacent levels.
 | Reasoning | 10% | Explanation quality, tradeoffs, root cause analysis, architecture understanding |
 | Report Quality | 10% | Clear `result.md`, useful validation notes, honest limitations |
 
-## 9. Final Recommendation
+## 10. Final Recommendation
 
 State which model is better for each use case:
 
@@ -254,9 +305,10 @@ State which model is better for each use case:
 | Test generation | `<model>` | `<reason>` |
 | Overall coding agent | `<model>` | `<reason>` |
 
-## 10. Caveats And Follow-Ups
+## 11. Caveats And Follow-Ups
 
 - `<Any tasks that should be rerun>`
 - `<Any environmental issue that affected fairness>`
 - `<Any missing logs, incomplete result files, or suspicious outputs>`
 - `<Suggested benchmark improvements>`
+- `<Any missing token or cache usage data that limits cost comparison>`

@@ -98,4 +98,4 @@ When finished, update `result.md` with:
 - validation, loading, empty, and error states implemented
 - tests run or verification performed, if any
 - known limitations or follow-up work
-- token usage if available
+- token usage and estimated cost if available
