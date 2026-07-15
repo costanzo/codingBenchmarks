@@ -2,8 +2,7 @@
 **/workspace/out/
 
 # Keycloak task worktrees
-**/workspace/keycloak/
-!**/workspace/keycloak/
+**/workspace/keycloak/*
 !**/workspace/keycloak/.gitkeep
 
 .DS_Store
