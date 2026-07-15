@@ -205,7 +205,9 @@ git clone https://github.com/keycloak/keycloak.git upstream/keycloak
 cd upstream/keycloak
 ```
 
-Choose and record the benchmark base branch and base commit:
+Choose and record the benchmark base branch and base commit.
+
+For tasks that do not depend on a historical bug, you can use the current pinned `main` commit:
 
 ```bash
 git fetch origin
@@ -216,30 +218,50 @@ BASE_COMMIT=$(git rev-parse HEAD)
 echo "$BASE_BRANCH $BASE_COMMIT"
 ```
 
-For a fair run, every model and task must use the same `BASE_BRANCH` and `BASE_COMMIT`.
+For bug-fix tasks based on closed upstream issues, do not automatically use latest `main`. Latest code may already contain the fix, which makes the benchmark invalid. Use an affected release tag or an explicitly pinned pre-fix commit, and use the same pinned commit for every model.
+
+For `02_bug_fix/task_001` / Keycloak issue `#50177`, use Keycloak `26.6.0` as the affected base:
+
+```bash
+git fetch origin --tags
+git checkout 26.6.0
+BASE_BRANCH=26.6.0
+BASE_COMMIT=$(git rev-parse HEAD)
+echo "$BASE_BRANCH $BASE_COMMIT"
+```
+
+For a fair run, every model and task being compared for the same benchmark task must use the same `BASE_BRANCH` and `BASE_COMMIT`.
 
 ## 9. Create Per-Model Per-Task Worktrees
 
-From `upstream/keycloak`, create one worktree per model/task. Example for `CASSANDRA` bug-fix task:
+From `upstream/keycloak`, create one worktree per model/task.
+
+Before adding a worktree into a placeholder `workspace/keycloak/` directory, remove the placeholder `.gitkeep` file for that task:
+
+```bash
+rm -f ../../models/CASSANDRA/02_bug_fix/task_001/workspace/keycloak/.gitkeep
+rm -f ../../models/MEDEA/02_bug_fix/task_001/workspace/keycloak/.gitkeep
+```
+
+Example for `02_bug_fix/task_001` using the affected `26.6.0` base commit selected above:
 
 ```bash
 cd upstream/keycloak
-BASE_COMMIT=$(git rev-parse HEAD)
+# BASE_COMMIT should already point at the pinned affected base, such as 26.6.0.
+# If needed, confirm it with: git rev-parse HEAD
 
 git worktree add \
   ../../models/CASSANDRA/02_bug_fix/task_001/workspace/keycloak \
   -b bench/CASSANDRA/02_bug_fix/task_001 \
   "$BASE_COMMIT"
-```
 
-Example for the same bug-fix task for `MEDEA`:
-
-```bash
 git worktree add \
   ../../models/MEDEA/02_bug_fix/task_001/workspace/keycloak \
   -b bench/MEDEA/02_bug_fix/task_001 \
   "$BASE_COMMIT"
 ```
+
+If a branch already exists from a previous attempt, choose a fresh branch name such as `bench/CASSANDRA/02_bug_fix/task_001-rerun-1`, or remove the stale worktree/branch only after confirming its results are no longer needed.
 
 Use this branch pattern for all benchmark worktrees:
 
@@ -276,7 +298,7 @@ codex
 Prompt example:
 
 ```text
-Read ../../prompt.md and complete the task in this Keycloak worktree using Java targeting JDK 17. You may run normal workspace commands if useful. Put your final report in ../../result.md.
+Read ../../prompt.md and complete the task in this Keycloak worktree using Java targeting JDK 17. You may run normal workspace commands if useful. Put your final report in ../../result.md, including token usage and estimated cost if available.
 ```
 
 The coding agent should edit files in `workspace/keycloak/`. The final benchmark report should be written to the sibling task file:
