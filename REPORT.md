@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Repository under test | Keycloak benchmark suite; Tasks 2-3 use Keycloak worktrees; Task 1 is standalone Java |
+| Repository under test | Keycloak benchmark suite; Tasks 2-4 use Keycloak worktrees; Task 1 is standalone Java |
 | Repository URL | https://github.com/keycloak/keycloak |
 | Base branch | unknown |
 | Base commit | unknown |
@@ -15,9 +15,9 @@
 | Pricing included | Yes where `session.json` is available |
 | Score scale | 1.0 to 5.0, half-point increments |
 
-This report currently summarizes `01_algorithm/task_001`, `02_bug_fix/task_001`, and
-`03_frontend_ui/task_001` for both models. Other benchmark categories remain pending until their
-results are evaluated.
+This report currently summarizes `01_algorithm/task_001`, `02_bug_fix/task_001`,
+`03_frontend_ui/task_001`, and `04_pr_review/task_001` for both models. Other benchmark categories
+remain pending until their results are evaluated.
 
 ## 2. Executive Summary
 
@@ -57,21 +57,28 @@ both submissions are good Admin Console integrations, but neither adds much new 
 beyond what the base already had and MEDEA's workspace could not be linted locally due missing JS
 dependencies.
 
+Both models completed Task 4, the PR review of Keycloak PR #50650. CASSANDRA produced the stronger
+review: it identified the same important null-user and coverage risks as MEDEA, but used better
+severity discipline and more clearly separated confirmed code facts from inferred reachability.
+MEDEA's review was broad and useful, but its headline P1 client-credentials/null-user finding
+overstated the confirmed impact because the client credentials flow creates a service-account user
+session before token issuance.
+
 ## 3. Overall Leaderboard
 
 Evaluated tasks only:
 
 | Rank | Model | Overall Score | Completed Tasks | Failed / Incomplete Tasks | Total Estimated Cost | Avg Cost / Task | Score / Dollar | High-Level Assessment |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 1 | CASSANDRA | 4.33 / 5 | 3 | 0 | $7.17582675 | $2.39194225 | 1.81 | Best quality so far: stronger Task 1, tied Tasks 2 and 3. |
-| 2 | MEDEA | 4.17 / 5 | 3 | 0 | $2.45018435 | $0.81672812 | 5.10 | Lower cost with strong Task 2 and comparable Task 3 results. |
+| 1 | CASSANDRA | 4.38 / 5 | 4 | 0 | $9.74789325 | $2.43697331 | 1.80 | Best quality so far: stronger Task 1 and Task 4, tied Tasks 2 and 3. |
+| 2 | MEDEA | 4.13 / 5 | 4 | 0 | $3.24137950 | $0.81034488 | 5.09 | Lower cost with strong Task 2 and comparable Task 3 results. |
 
 ## 4. Category Score Matrix
 
 | Model | Algorithm | Bug Fix | Frontend UI | PR Review | Code Analysis | Test Generation | Average |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| CASSANDRA | 4.5 | 4.5 | 4.0 | pending | pending | pending | 4.33 |
-| MEDEA | 4.0 | 4.5 | 4.0 | pending | pending | pending | 4.17 |
+| CASSANDRA | 4.5 | 4.5 | 4.0 | 4.5 | pending | pending | 4.38 |
+| MEDEA | 4.0 | 4.5 | 4.0 | 4.0 | pending | pending | 4.13 |
 
 ## 5. Pricing And Cost Efficiency
 
@@ -101,20 +108,20 @@ Evaluated tasks only:
 
 | Model | Algorithm | Bug Fix | Frontend UI | PR Review | Code Analysis | Test Generation | Total Cost |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| CASSANDRA | $1.02698425 | $2.54097225 | $3.60787025 | pending | pending | pending | $7.17582675 |
-| MEDEA | $0.26224780 | $1.56984270 | $0.61809385 | pending | pending | pending | $2.45018435 |
+| CASSANDRA | $1.02698425 | $2.54097225 | $3.60787025 | $2.57206650 | pending | pending | $9.74789325 |
+| MEDEA | $0.26224780 | $1.56984270 | $0.61809385 | $0.79119515 | pending | pending | $3.24137950 |
 
 ### 5.4 Cost-Quality Comparison
 
 | Model | Average Score | Total Cost | Completed Tasks | Avg Cost / Completed Task | Score / Dollar | Cost-Adjusted Assessment |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| CASSANDRA | 4.33 / 5 | $7.17582675 | 3 | $2.39194225 | 1.81 | Best average quality so far, but substantially higher cost. |
-| MEDEA | 4.17 / 5 | $2.45018435 | 3 | $0.81672812 | 5.10 | Strongest cost-adjusted result across the evaluated tasks. |
+| CASSANDRA | 4.38 / 5 | $9.74789325 | 4 | $2.43697331 | 1.80 | Best average quality so far, but substantially higher cost. |
+| MEDEA | 4.13 / 5 | $3.24137950 | 4 | $0.81034488 | 5.09 | Strongest cost-adjusted result across the evaluated tasks. |
 
 **Comparison Notes**
 
-- Quality premium: CASSANDRA delivered the stronger Task 1 result and tied Task 2 and Task 3 quality.
-- Cost efficiency: MEDEA has the higher score-per-dollar across the three evaluated tasks.
+- Quality premium: CASSANDRA delivered the stronger Task 1 and Task 4 results, and tied Task 2 and Task 3 quality.
+- Cost efficiency: MEDEA has the higher score-per-dollar across the four evaluated tasks.
 - Token profile: CASSANDRA Task 3 cost is the largest evaluated CASSANDRA task so far at $3.60787025; MEDEA Task 2 consumed the largest cache-hit volume with 6,577,213 cache-hit tokens.
 - Practical recommendation for Task 1: CASSANDRA for quality, MEDEA for cost-sensitive runs where moderate scalability risk is acceptable.
 
@@ -173,7 +180,19 @@ Evaluated tasks only:
 
 ### 6.4 PR Review
 
-Pending.
+**Winner:** CASSANDRA
+
+| Model | Score | Critical Issue Detection | Accuracy | Changed Area Coverage | False Positive Control | Actionability |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| CASSANDRA | 4.5 | 4.5 | 4.5 | 4.5 | 4.5 | 4.5 |
+| MEDEA | 4.0 | 4.0 | 3.5 | 4.5 | 3.5 | 4.0 |
+
+**Comparison Notes**
+
+- Both reviews correctly understood PR #50650: it removes pre-auth user lookup from username/delegation parameterized scopes and defers user existence, disabled, self-target, and impersonation checks to post-auth filtering.
+- CASSANDRA's strongest findings were the implicit non-null-user contract, inconsistent `DefaultClientSessionContext` null handling, missing indistinguishability tests for the enumeration oracle, and attacker-triggerable WARN logging.
+- MEDEA covered a wider set of adjacent grant paths and useful missing tests, including disabled users, email lookup, PAR, token exchange, and self-targeting.
+- The deciding difference is accuracy: MEDEA's P1 client-credentials/null-user claim is partly overclaimed because client credentials uses a service-account user session before token issuance. CASSANDRA framed the same family of risks as inferred P2 issues, which better matches the code.
 
 ### 6.5 Code Analysis
 
@@ -323,6 +342,42 @@ pnpm exec eslint apps/admin-ui/src/organizations/DetailOrganization.tsx apps/adm
 - Weaknesses: Most product functionality already existed in the base; added tests do not exercise full invite/revoke behavior and were not run end to end.
 - Risk: Moderate. The routing change is straightforward, but full frontend build and browser e2e validation were not completed.
 
+#### 04_pr_review / task_001
+
+| Field | Value |
+| --- | --- |
+| Worktree branch | `bench/CASSANDRA/04_pr_review/task_001` |
+| Result file | `models/CASSANDRA/04_pr_review/task_001/result.md` |
+| Score file | `models/CASSANDRA/04_pr_review/task_001/score.md` |
+| Overall score | 4.5 / 5 |
+| Status | completed |
+| Input tokens | 92 |
+| Output tokens | 33252 |
+| Reasoning tokens | 0 |
+| Cache write tokens | 97168 |
+| Cache hit tokens | 2266013 |
+| Total tokens | 2396525 |
+| Estimated cost | $2.57206650 |
+
+**Review Target**
+
+- Keycloak PR #50650, head `ec5bb77fc8b8700856a8d448c0f2e9ba6e5a08ef`.
+- Review compared the PR against its direct parent because the benchmark pinned base `26.6.0` predates parameterized scopes.
+
+**Findings Reported**
+
+- P2: post-auth filtering depends on callers passing a non-null authenticated user; unexpected null-user parsing can skip `validateParameterWithUser`.
+- P2: `DefaultClientSessionContext` adds a null-userSession guard in one path but still dereferences `getUserSession().getUser()` in sibling methods.
+- P2: tests do not assert indistinguishable responses for existing, nonexistent, and disabled targets, which is the core enumeration property.
+- P3: missing PAR, self-target, disabled-at-authorization, and provider-level tests.
+- P3: WARN logging can be attacker-triggered and includes raw parameter/user-state details.
+
+**Evaluator Notes**
+
+- Strengths: Accurate reconstruction of the security fix, good changed-area coverage, clear severity discipline, and actionable follow-up tests.
+- Weaknesses: No local tests or experiments were run; the highest-value null-user finding remains an inferred reachability risk.
+- Risk: Low false-positive risk. The findings align with inspected PR code and are appropriately qualified.
+
 ### 7.2 MEDEA
 
 #### 01_algorithm / task_001
@@ -469,17 +524,55 @@ No targeted ESLint or frontend test command was run because this MEDEA worktree 
 - Weaknesses: The core invitation workflow already existed in the pinned base; tests do not exercise a full create/revoke lifecycle and were not executed end to end.
 - Risk: Moderate. The route integration is straightforward, but the client-side multi-status filter is page-local and full frontend lint/build/browser validation was not completed in this workspace.
 
+#### 04_pr_review / task_001
+
+| Field | Value |
+| --- | --- |
+| Worktree branch | `bench/MEDEA/04_pr_review/task_001` |
+| Result file | `models/MEDEA/04_pr_review/task_001/result.md` |
+| Score file | `models/MEDEA/04_pr_review/task_001/score.md` |
+| Overall score | 4.0 / 5 |
+| Status | completed |
+| Input tokens | 201514 |
+| Output tokens | 13961 |
+| Reasoning tokens | 12448 |
+| Cache write tokens | 0 |
+| Cache hit tokens | 2847096 |
+| Total tokens | 3075019 |
+| Estimated cost | $0.79119515 |
+
+**Review Target**
+
+- Keycloak PR #50650, head `ec5bb77fc8b8700856a8d448c0f2e9ba6e5a08ef`.
+- Review compared the PR against its direct parent because the benchmark pinned base `26.6.0` predates parameterized scopes.
+
+**Findings Reported**
+
+- P1: client-credentials/null-userSession path may include invalid username/delegation scopes instead of dropping them.
+- P1: token-exchange and generic grant validation still call null-user scope validation even when a target user may be available.
+- P2: missing disabled-user and email-as-username enumeration tests.
+- P2: missing PAR-specific test.
+- P2: silent-drop behavior should be documented.
+- P2/P3: detailed WARN logging and missing Javadoc/comments around null-vs-user validation semantics.
+
+**Evaluator Notes**
+
+- Strengths: Broad code navigation, good explanation of the vulnerability, useful test-gap list, and actionable recommendations.
+- Weaknesses: The headline P1 client-credentials impact is partly inaccurate because client credentials creates a service-account user session before token issuance; the null-user concern is better treated as an inferred edge risk.
+- Risk: Moderate false-positive risk on severity, but the report is still useful for maintainers.
+
 ## 8. Direct Model-vs-Model Findings
 
 ### 8.1 Strengths Comparison
 
 | Area | CASSANDRA | MEDEA | Better |
 | --- | --- | --- | --- |
-| Code navigation | Used expected workspaces for Tasks 1, 2, and 3. | Used expected workspaces for Tasks 1, 2, and 3. | Tie |
+| Code navigation | Used expected workspaces for Tasks 1, 2, 3, and 4. | Used expected workspaces for Tasks 1, 2, 3, and 4. | Tie |
 | Java / frontend implementation quality | Strong Task 1, focused Task 2 fix, native Task 3 tab integration. | Good Task 1, broad Task 2 provider-level fix, comparable Task 3 tab integration. | CASSANDRA |
-| Keycloak-specific understanding | Strong Task 2 certificate-provider understanding and Task 3 Admin Console fit. | Strong Task 2 certificate-provider understanding and Task 3 Admin Console fit. | Tie |
+| Keycloak-specific understanding | Strong Task 2 certificate-provider understanding, Task 3 Admin Console fit, and Task 4 OIDC scope review. | Strong Task 2 certificate-provider understanding, Task 3 Admin Console fit, and broad Task 4 grant-path review. | Tie |
 | Testing instinct | Strong Task 1 validation, strong Task 2 tests, useful but limited Task 3 tests. | Good Task 1 validation, strong Task 2 provider tests, useful but limited Task 3 tests. | CASSANDRA |
-| Debugging/root cause analysis | Strong Task 1 reasoning. | Strong Task 2 root cause analysis. | Tie |
+| Review severity discipline | Strong Task 4 issue prioritization with well-labeled inference. | Useful Task 4 findings, but one over-severe P1 claim. | CASSANDRA |
+| Debugging/root cause analysis | Strong Task 1 reasoning and Task 4 security-flow tracing. | Strong Task 2 root cause analysis and broad Task 4 path tracing. | CASSANDRA |
 | Report clarity | Detailed task reports after token updates. | Detailed task reports after token updates. | Tie |
 | Command usage discipline | Targeted Task 1 commands and targeted Task 3 lint verification. | Targeted Task 2 Maven tests; Task 1 had minor artifact cleanliness issue and Task 3 lacked local JS dependencies. | CASSANDRA |
 
@@ -490,16 +583,17 @@ No targeted ESLint or frontend test command was run because this MEDEA worktree 
 | Over-broad changes | Minor compatibility/scope caveat | Minor artifact/scope issue | CASSANDRA changes Elytron full-DN behavior; MEDEA Task 1 reported compiled `out/` and Task 2 changes more cert paths. |
 | Missed edge cases | Low evidence | Low-to-moderate evidence | Both tested edge cases; CASSANDRA's explicit edge suite is stronger. |
 | Hallucinated APIs/classes | No evidence | No evidence | No unsupported APIs/classes observed in evaluated task outputs. |
-| Weak validation | No for Task 1 | No for Task 2, partial for Task 1 | MEDEA Task 2 validation is solid; Task 1 lacks CASSANDRA-scale stress. |
+| Weak validation | No for Task 1; Task 4 review-only validation was static. | No for Task 2; partial for Task 1; Task 4 review-only validation was static. | MEDEA Task 2 validation is solid; Task 1 lacks CASSANDRA-scale stress. |
+| Overstated review finding | No major instance observed. | One Task 4 P1 impact partly overclaimed. | MEDEA's client-credentials/null-user claim is useful but not confirmed at P1 severity. |
 | Poor report detail | No | No | Both final reports are usable. |
-| Incomplete task | No for evaluated Tasks 1, 2, and 3 | No for evaluated Tasks 1, 2, and 3 | No evaluated submissions are incomplete. |
+| Incomplete task | No for evaluated Tasks 1, 2, 3, and 4 | No for evaluated Tasks 1, 2, 3, and 4 | No evaluated submissions are incomplete. |
 
 ### 8.3 Reliability Assessment
 
 | Model | Reliability Rating | Evidence |
 | --- | ---: | --- |
-| CASSANDRA | 4.33 / 5 | Completed Tasks 1, 2, and 3 with code, tests, result reports, and token logs; strongest current evidence is Task 1 plus strong Task 2 tests. |
-| MEDEA | 4.17 / 5 | Completed Tasks 1, 2, and 3 with code, tests, result reports, and token logs; strongest current evidence is the Task 2 bug fix plus comparable Task 3 integration. |
+| CASSANDRA | 4.38 / 5 | Completed Tasks 1, 2, 3, and 4 with code/review outputs, tests where applicable, result reports, and token logs; strongest current evidence is Task 1 plus Task 4 review quality. |
+| MEDEA | 4.13 / 5 | Completed Tasks 1, 2, 3, and 4 with code/review outputs, tests where applicable, result reports, and token logs; strongest current evidence is the Task 2 bug fix plus comparable Task 3 integration. |
 
 ## 9. Score Rationale
 
@@ -515,13 +609,11 @@ No targeted ESLint or frontend test command was run because this MEDEA worktree 
 
 ### 9.2 Score Dimensions
 
-| Dimension | Weight | What It Measures |
-| --- | ---: | --- |
-| Correctness | 40% | Whether the answer solves the requested problem and avoids breaking existing behavior |
-| Completeness | 20% | Whether all requested requirements are addressed |
-| Code Quality | 20% | Fit with task conventions, maintainability, simplicity, and Java quality |
-| Reasoning | 10% | Explanation quality, tradeoffs, root cause analysis, architecture understanding |
-| Report Quality | 10% | Clear `result.md`, useful validation notes, honest limitations |
+Scoring follows each task's `metadata.yaml`. Implementation tasks emphasize correctness,
+completeness, code quality, reasoning, and report quality. Frontend UI additionally emphasizes
+product fit, Admin Console integration, workflow completeness, state/error handling, and
+verification. PR review emphasizes critical issue detection, accuracy, changed-area coverage,
+false-positive control, and actionability.
 
 ## 10. Final Recommendation
 
@@ -533,17 +625,19 @@ Evaluated tasks:
 | Cost-sensitive algorithm runs | MEDEA | Completed the task at lower reported session cost. |
 | Bug fixing | Tie | Both completed Task 2 with robust certificate-subject fixes and passing targeted provider tests. |
 | UI work | Tie | Both completed Task 3 with a routable organization Invitations tab and added frontend/admin-client tests. |
-| PR review | pending | Not evaluated in this report update. |
+| PR review | CASSANDRA | Better severity discipline and fewer overclaims in Task 4. |
 | Codebase analysis | pending | Not evaluated in this report update. |
 | Test generation | pending | Not evaluated in this report update. |
 | Overall coding agent | CASSANDRA so far | Higher average score across currently evaluated tasks. |
 
 ## 11. Caveats And Follow-Ups
 
-- This report currently covers `01_algorithm/task_001`, `02_bug_fix/task_001`, and `03_frontend_ui/task_001` for both models.
+- This report currently covers `01_algorithm/task_001`, `02_bug_fix/task_001`, `03_frontend_ui/task_001`, and `04_pr_review/task_001` for both models.
 - MEDEA's `session.json` includes 18,919 reasoning tokens. The public model rate card does not specify separate reasoning or cache pricing, so the report uses the total session cost directly.
 - MEDEA Task 2's `session.json` includes 9,609 reasoning tokens and 6,577,213 cache-hit tokens. The report uses the total session cost directly.
 - MEDEA Task 3's `session.json` includes 5,710 reasoning tokens and 2,321,709 cache-hit tokens. The report uses the total session cost directly.
+- MEDEA Task 4's `session.json` includes 12,448 reasoning tokens and 2,847,096 cache-hit tokens. The report uses the total session cost directly.
 - CASSANDRA Task 2's `session.json` includes 109,445 cache-write tokens and 2,472,112 cache-hit tokens.
 - CASSANDRA Task 3's `session.json` includes 96,715 cache-write tokens and 4,340,223 cache-hit tokens.
+- CASSANDRA Task 4's `session.json` includes 97,168 cache-write tokens and 2,266,013 cache-hit tokens.
 - Remaining categories should be evaluated before drawing an overall benchmark conclusion across all six tasks.
