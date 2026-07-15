@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Repository under test | Keycloak benchmark suite; Task 1 is standalone Java algorithm work; Task 2 is Keycloak bug fixing |
+| Repository under test | Keycloak benchmark suite; Tasks 2-3 use Keycloak worktrees; Task 1 is standalone Java |
 | Repository URL | https://github.com/keycloak/keycloak |
 | Base branch | unknown |
 | Base commit | unknown |
@@ -15,8 +15,9 @@
 | Pricing included | Yes where `session.json` is available |
 | Score scale | 1.0 to 5.0, half-point increments |
 
-This report currently summarizes `01_algorithm/task_001` and `02_bug_fix/task_001` for both models.
-Other benchmark categories remain pending until their results are evaluated.
+This report currently summarizes `01_algorithm/task_001`, `02_bug_fix/task_001`, and
+`03_frontend_ui/task_001` for both models. Other benchmark categories remain pending until their
+results are evaluated.
 
 ## 2. Executive Summary
 
@@ -42,21 +43,35 @@ the original bug; MEDEA has broader BouncyCastle/FIPS coverage by also updating 
 subject construction and preserves more Elytron `CN=` compatibility. The Bug Fix category is a tie
 on score.
 
+CASSANDRA has also completed Task 3, the Organization Invitation Management UI task. The strongest
+finding is that the pinned Keycloak base already contained a comprehensive invitation workflow, so
+CASSANDRA improved its Admin Console integration by making Invitations a first-class routable
+organization tab and adding frontend/admin-client tests. This is a useful, native-feeling change, but
+the net new product functionality is limited because the main workflow already existed.
+
+MEDEA has now completed Task 3 as well. Its frontend result is very similar to CASSANDRA's: it
+promotes Invitations to a routable organization detail tab, removes the nested Members/Invitations
+wrapper, and adds Playwright/admin-client tests. MEDEA also makes a small loader improvement for
+multi-status filtering and functional refresh updates. The category remains a tie on score because
+both submissions are good Admin Console integrations, but neither adds much new workflow capability
+beyond what the base already had and MEDEA's workspace could not be linted locally due missing JS
+dependencies.
+
 ## 3. Overall Leaderboard
 
 Evaluated tasks only:
 
 | Rank | Model | Overall Score | Completed Tasks | Failed / Incomplete Tasks | Total Estimated Cost | Avg Cost / Task | Score / Dollar | High-Level Assessment |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 1 | CASSANDRA | 4.5 / 5 | 2 | 0 | $3.56795650 | $1.78397825 | 2.52 | Best quality so far: stronger Task 1 and tied Task 2. |
-| 2 | MEDEA | 4.25 / 5 | 2 | 0 | $1.83209050 | $0.91604525 | 4.64 | Lower cost with a strong Task 2 result. |
+| 1 | CASSANDRA | 4.33 / 5 | 3 | 0 | $7.17582675 | $2.39194225 | 1.81 | Best quality so far: stronger Task 1, tied Tasks 2 and 3. |
+| 2 | MEDEA | 4.17 / 5 | 3 | 0 | $2.45018435 | $0.81672812 | 5.10 | Lower cost with strong Task 2 and comparable Task 3 results. |
 
 ## 4. Category Score Matrix
 
 | Model | Algorithm | Bug Fix | Frontend UI | PR Review | Code Analysis | Test Generation | Average |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| CASSANDRA | 4.5 | 4.5 | pending | pending | pending | pending | 4.5 |
-| MEDEA | 4.0 | 4.5 | pending | pending | pending | pending | 4.25 |
+| CASSANDRA | 4.5 | 4.5 | 4.0 | pending | pending | pending | 4.33 |
+| MEDEA | 4.0 | 4.5 | 4.0 | pending | pending | pending | 4.17 |
 
 ## 5. Pricing And Cost Efficiency
 
@@ -86,21 +101,21 @@ Evaluated tasks only:
 
 | Model | Algorithm | Bug Fix | Frontend UI | PR Review | Code Analysis | Test Generation | Total Cost |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| CASSANDRA | $1.02698425 | $2.54097225 | pending | pending | pending | pending | $3.56795650 |
-| MEDEA | $0.26224780 | $1.56984270 | pending | pending | pending | pending | $1.83209050 |
+| CASSANDRA | $1.02698425 | $2.54097225 | $3.60787025 | pending | pending | pending | $7.17582675 |
+| MEDEA | $0.26224780 | $1.56984270 | $0.61809385 | pending | pending | pending | $2.45018435 |
 
 ### 5.4 Cost-Quality Comparison
 
 | Model | Average Score | Total Cost | Completed Tasks | Avg Cost / Completed Task | Score / Dollar | Cost-Adjusted Assessment |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| CASSANDRA | 4.5 / 5 | $3.56795650 | 2 | $1.78397825 | 2.52 | Best average quality so far, but higher cost. |
-| MEDEA | 4.25 / 5 | $1.83209050 | 2 | $0.91604525 | 4.64 | Strong cost-adjusted result across the two evaluated MEDEA tasks. |
+| CASSANDRA | 4.33 / 5 | $7.17582675 | 3 | $2.39194225 | 1.81 | Best average quality so far, but substantially higher cost. |
+| MEDEA | 4.17 / 5 | $2.45018435 | 3 | $0.81672812 | 5.10 | Strongest cost-adjusted result across the evaluated tasks. |
 
 **Comparison Notes**
 
-- Quality premium: CASSANDRA delivered the stronger Task 1 result and tied Task 2 quality.
-- Cost efficiency: MEDEA has the higher score-per-dollar across the two evaluated tasks.
-- Token profile: CASSANDRA used fewer direct input tokens on Task 1 but substantial cache traffic; MEDEA Task 2 consumed a much larger Keycloak context with 6,577,213 cache-hit tokens.
+- Quality premium: CASSANDRA delivered the stronger Task 1 result and tied Task 2 and Task 3 quality.
+- Cost efficiency: MEDEA has the higher score-per-dollar across the three evaluated tasks.
+- Token profile: CASSANDRA Task 3 cost is the largest evaluated CASSANDRA task so far at $3.60787025; MEDEA Task 2 consumed the largest cache-hit volume with 6,577,213 cache-hit tokens.
 - Practical recommendation for Task 1: CASSANDRA for quality, MEDEA for cost-sensitive runs where moderate scalability risk is acceptable.
 
 ## 6. Category-by-Category Comparison
@@ -141,7 +156,20 @@ Evaluated tasks only:
 
 ### 6.3 Frontend UI
 
-Pending.
+**Winner:** Tie
+
+| Model | Score | Requirement Fit | UI Integration | Accessibility / States | Maintainability | Verification |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| CASSANDRA | 4.0 | 4.0 | 4.5 | 4.0 | 4.0 | 3.5 |
+| MEDEA | 4.0 | 4.0 | 4.5 | 4.0 | 4.0 | 3.5 |
+
+**Comparison Notes**
+
+- Requirement coverage: Both models found that the base already had the full invitation workflow and preserved it, then promoted Invitations to a first-class routable organization tab.
+- Fit with Keycloak UI patterns: Both submissions follow existing `RoutableTabs` / `useRoutableTab` organization-detail patterns and remove the redundant nested tab wrapper.
+- Accessibility and states: The underlying existing invitation UI already includes loading, empty, validation, success, and request-error paths. Neither model materially redesigned those states.
+- Tests: Both added Playwright coverage for navigation, empty state, modal opening, validation, and UI controls plus admin-client invitation-list tests. Neither executed full browser e2e validation or covered a complete create/revoke lifecycle.
+- Main differentiator: MEDEA added a small `Invitations.tsx` loader/refresh improvement; CASSANDRA's local targeted ESLint verification was stronger because dependencies were present in that workspace.
 
 ### 6.4 PR Review
 
@@ -248,6 +276,53 @@ BUILD SUCCESS
 - Weaknesses: No SAML integration test; BouncyCastle/FIPS V3 certificate generation still uses string-parsed subject construction.
 - Risk: Low-to-moderate. The SAML default-certificate path is addressed, but Elytron preformatted-DN compatibility and non-SAML V3 certificate subject handling deserve review.
 
+#### 03_frontend_ui / task_001
+
+| Field | Value |
+| --- | --- |
+| Worktree branch | `bench/CASSANDRA/03_frontend_ui/task_001` |
+| Result file | `models/CASSANDRA/03_frontend_ui/task_001/result.md` |
+| Score file | `models/CASSANDRA/03_frontend_ui/task_001/score.md` |
+| Overall score | 4.0 / 5 |
+| Status | completed |
+| Input tokens | 148 |
+| Output tokens | 33302 |
+| Reasoning tokens | 0 |
+| Cache write tokens | 96715 |
+| Cache hit tokens | 4340223 |
+| Total tokens | 4470388 |
+| Estimated cost | $3.60787025 |
+
+**Files Changed**
+
+- `js/apps/admin-ui/src/organizations/routes/EditOrganization.tsx`: adds `invitations` as a typed organization tab.
+- `js/apps/admin-ui/src/organizations/DetailOrganization.tsx`: renders Members and Invitations as sibling routable tabs.
+- `js/apps/admin-ui/src/organizations/MembersSection.tsx`: removes the old nested Members/Invitations tab wrapper.
+- `js/apps/admin-ui/test/organization/invitations.spec.ts`: Playwright invitation navigation/modal/validation tests.
+- `js/apps/admin-ui/test/organization/invitations.ts`: Playwright page helpers.
+- `js/libs/keycloak-admin-client/test/organizations.spec.ts`: adds an invitation list test for a fresh organization.
+
+**Commands / Evidence Reported By Agent**
+
+```text
+ESLint on changed/surrounding frontend files: 0 errors
+Full type-check/build not completed due pre-existing generated Kiota admin-client dependency drift
+Playwright and admin-client tests authored but not executed against a running server
+```
+
+**Evaluator Verification**
+
+```text
+pnpm exec eslint apps/admin-ui/src/organizations/DetailOrganization.tsx apps/admin-ui/src/organizations/routes/EditOrganization.tsx apps/admin-ui/test/organization/invitations.spec.ts apps/admin-ui/test/organization/invitations.ts libs/keycloak-admin-client/test/organizations.spec.ts
+0 errors, 8 warnings
+```
+
+**Evaluator Notes**
+
+- Strengths: Native Admin Console integration, useful deep-linkable route, scoped code change, preserves existing invitation workflow, adds test coverage.
+- Weaknesses: Most product functionality already existed in the base; added tests do not exercise full invite/revoke behavior and were not run end to end.
+- Risk: Moderate. The routing change is straightforward, but full frontend build and browser e2e validation were not completed.
+
 ### 7.2 MEDEA
 
 #### 01_algorithm / task_001
@@ -341,19 +416,72 @@ BUILD SUCCESS
 - Weaknesses: No SAML admin-client integration test; provider-level behavior change is broader than the SAML setup path.
 - Risk: Low-to-moderate. The broader provider-level change is justified, but full-DN compatibility for BouncyCastle provider callers deserves review.
 
+#### 03_frontend_ui / task_001
+
+| Field | Value |
+| --- | --- |
+| Worktree branch | `bench/MEDEA/03_frontend_ui/task_001` |
+| Result file | `models/MEDEA/03_frontend_ui/task_001/result.md` |
+| Score file | `models/MEDEA/03_frontend_ui/task_001/score.md` |
+| Overall score | 4.0 / 5 |
+| Status | completed |
+| Input tokens | 144980 |
+| Output tokens | 15140 |
+| Reasoning tokens | 5710 |
+| Cache write tokens | 0 |
+| Cache hit tokens | 2321709 |
+| Total tokens | 2487539 |
+| Estimated cost | $0.61809385 |
+
+**Files Changed**
+
+- `js/apps/admin-ui/src/organizations/routes/EditOrganization.tsx`: adds `invitations` as a typed organization tab.
+- `js/apps/admin-ui/src/organizations/DetailOrganization.tsx`: renders Members and Invitations as sibling routable tabs.
+- `js/apps/admin-ui/src/organizations/Invitations.tsx`: uses a functional refresh update and handles multi-status filter selections client-side when the backend can only filter by one status.
+- `js/apps/admin-ui/src/organizations/MembersSection.tsx`: removes the old nested Members/Invitations tab wrapper.
+- `js/apps/admin-ui/test/organization/invitations.spec.ts`: Playwright invitation navigation/modal/validation/search/filter tests.
+- `js/apps/admin-ui/test/organization/invitations.ts`: Playwright page helpers.
+- `js/libs/keycloak-admin-client/test/organizations.spec.ts`: adds empty and parameterized invitation list tests for organizations.
+
+**Commands / Evidence Reported By Agent**
+
+```text
+Manual code review of DetailOrganization.tsx, EditOrganization.tsx, and Invitations.tsx
+Verified no remaining references to MembersSection
+Added Playwright e2e spec and admin-client integration tests
+Full e2e and production build not executed
+```
+
+**Evaluator Verification**
+
+```text
+git diff --stat
+git diff -- changed organization UI and test files
+rg for MembersSection references and invitation test selectors
+```
+
+No targeted ESLint or frontend test command was run because this MEDEA worktree does not have
+`js/node_modules` installed.
+
+**Evaluator Notes**
+
+- Strengths: Native Admin Console integration, deep-linkable Invitations route, scoped routing change, small refresh/filter improvement, useful frontend and admin-client test additions.
+- Weaknesses: The core invitation workflow already existed in the pinned base; tests do not exercise a full create/revoke lifecycle and were not executed end to end.
+- Risk: Moderate. The route integration is straightforward, but the client-side multi-status filter is page-local and full frontend lint/build/browser validation was not completed in this workspace.
+
 ## 8. Direct Model-vs-Model Findings
 
 ### 8.1 Strengths Comparison
 
 | Area | CASSANDRA | MEDEA | Better |
 | --- | --- | --- | --- |
-| Code navigation | Used expected workspaces for Tasks 1 and 2. | Used expected workspaces for Tasks 1 and 2. | Tie |
-| Java implementation quality | Strong Task 1 and focused Task 2 fix. | Good Task 1, broad Task 2 provider-level fix. | CASSANDRA |
-| Keycloak-specific understanding | Strong Task 2 understanding of Keycloak certificate providers. | Strong Task 2 understanding of Keycloak certificate providers. | Tie |
-| Testing instinct | Strong Task 1 validation. | Good Task 1 validation and strong Task 2 provider tests. | Tie |
+| Code navigation | Used expected workspaces for Tasks 1, 2, and 3. | Used expected workspaces for Tasks 1, 2, and 3. | Tie |
+| Java / frontend implementation quality | Strong Task 1, focused Task 2 fix, native Task 3 tab integration. | Good Task 1, broad Task 2 provider-level fix, comparable Task 3 tab integration. | CASSANDRA |
+| Keycloak-specific understanding | Strong Task 2 certificate-provider understanding and Task 3 Admin Console fit. | Strong Task 2 certificate-provider understanding and Task 3 Admin Console fit. | Tie |
+| Testing instinct | Strong Task 1 validation, strong Task 2 tests, useful but limited Task 3 tests. | Good Task 1 validation, strong Task 2 provider tests, useful but limited Task 3 tests. | CASSANDRA |
 | Debugging/root cause analysis | Strong Task 1 reasoning. | Strong Task 2 root cause analysis. | Tie |
-| Report clarity | Detailed Task 1 and Task 2 reports after token updates. | Detailed Task 1 and Task 2 reports after token updates. | Tie |
-| Command usage discipline | Targeted Task 1 commands. | Targeted Task 2 Maven tests; Task 1 had minor artifact cleanliness issue. | Tie |
+| Report clarity | Detailed task reports after token updates. | Detailed task reports after token updates. | Tie |
+| Command usage discipline | Targeted Task 1 commands and targeted Task 3 lint verification. | Targeted Task 2 Maven tests; Task 1 had minor artifact cleanliness issue and Task 3 lacked local JS dependencies. | CASSANDRA |
 
 ### 8.2 Failure Mode Comparison
 
@@ -364,14 +492,14 @@ BUILD SUCCESS
 | Hallucinated APIs/classes | No evidence | No evidence | No unsupported APIs/classes observed in evaluated task outputs. |
 | Weak validation | No for Task 1 | No for Task 2, partial for Task 1 | MEDEA Task 2 validation is solid; Task 1 lacks CASSANDRA-scale stress. |
 | Poor report detail | No | No | Both final reports are usable. |
-| Incomplete task | No for evaluated Tasks 1 and 2 | No for evaluated Tasks 1 and 2 | Both completed the two currently evaluated tasks. |
+| Incomplete task | No for evaluated Tasks 1, 2, and 3 | No for evaluated Tasks 1, 2, and 3 | No evaluated submissions are incomplete. |
 
 ### 8.3 Reliability Assessment
 
 | Model | Reliability Rating | Evidence |
 | --- | ---: | --- |
-| CASSANDRA | 4.5 / 5 | Completed Tasks 1 and 2 with code, tests, result reports, and token logs; strongest current evidence is Task 1 plus strong Task 2 tests. |
-| MEDEA | 4.25 / 5 | Completed Tasks 1 and 2 with code, tests, result reports, and token logs; strongest current evidence is the Task 2 bug fix. |
+| CASSANDRA | 4.33 / 5 | Completed Tasks 1, 2, and 3 with code, tests, result reports, and token logs; strongest current evidence is Task 1 plus strong Task 2 tests. |
+| MEDEA | 4.17 / 5 | Completed Tasks 1, 2, and 3 with code, tests, result reports, and token logs; strongest current evidence is the Task 2 bug fix plus comparable Task 3 integration. |
 
 ## 9. Score Rationale
 
@@ -404,16 +532,18 @@ Evaluated tasks:
 | Complex implementation | CASSANDRA | Stronger large-input validation and lower-allocation implementation. |
 | Cost-sensitive algorithm runs | MEDEA | Completed the task at lower reported session cost. |
 | Bug fixing | Tie | Both completed Task 2 with robust certificate-subject fixes and passing targeted provider tests. |
-| UI work | pending | Not evaluated in this report update. |
+| UI work | Tie | Both completed Task 3 with a routable organization Invitations tab and added frontend/admin-client tests. |
 | PR review | pending | Not evaluated in this report update. |
 | Codebase analysis | pending | Not evaluated in this report update. |
 | Test generation | pending | Not evaluated in this report update. |
-| Overall coding agent | CASSANDRA so far | Higher average score across the two currently evaluated tasks. |
+| Overall coding agent | CASSANDRA so far | Higher average score across currently evaluated tasks. |
 
 ## 11. Caveats And Follow-Ups
 
-- This report currently covers `01_algorithm/task_001` and `02_bug_fix/task_001` for both models.
+- This report currently covers `01_algorithm/task_001`, `02_bug_fix/task_001`, and `03_frontend_ui/task_001` for both models.
 - MEDEA's `session.json` includes 18,919 reasoning tokens. The public model rate card does not specify separate reasoning or cache pricing, so the report uses the total session cost directly.
 - MEDEA Task 2's `session.json` includes 9,609 reasoning tokens and 6,577,213 cache-hit tokens. The report uses the total session cost directly.
+- MEDEA Task 3's `session.json` includes 5,710 reasoning tokens and 2,321,709 cache-hit tokens. The report uses the total session cost directly.
 - CASSANDRA Task 2's `session.json` includes 109,445 cache-write tokens and 2,472,112 cache-hit tokens.
+- CASSANDRA Task 3's `session.json` includes 96,715 cache-write tokens and 4,340,223 cache-hit tokens.
 - Remaining categories should be evaluated before drawing an overall benchmark conclusion across all six tasks.
