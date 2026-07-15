@@ -15,9 +15,10 @@
 | Pricing included | Yes where `session.json` is available |
 | Score scale | 1.0 to 5.0, half-point increments |
 
-This report currently summarizes `01_algorithm/task_001`, `02_bug_fix/task_001`,
-`03_frontend_ui/task_001`, `04_pr_review/task_001`, and `05_code_analysis/task_001` for both
-models. The Test Generation category remains pending until its results are evaluated.
+This report summarizes all six benchmark categories for both models:
+`01_algorithm/task_001`, `02_bug_fix/task_001`, `03_frontend_ui/task_001`,
+`04_pr_review/task_001`, `05_code_analysis/task_001`, and
+`06_test_generation/task_001`.
 
 ## 2. Executive Summary
 
@@ -70,21 +71,29 @@ source-grounded lifecycle model, and explicitly labeled unresolved concurrency/c
 inference. MEDEA covered the same broad architecture and many edge cases, but used the upstream clone
 instead of the task worktree and had looser source-reference discipline.
 
+Both models completed Task 6, the password-policy test-generation task. CASSANDRA produced the more
+focused and maintainable test suite, with seven targeted classes and very high reported coverage,
+but its Mockito-based tests did not rerun in this evaluator environment because the local JDK could
+not initialize Mockito's inline Byte Buddy mock maker. MEDEA's tests are much more monolithic and
+reflection/proxy-heavy, but the targeted offline Maven rerun passed locally and its reported coverage
+also exceeds the 90% line and branch threshold. The category is therefore scored as a tie with
+different risk profiles.
+
 ## 3. Overall Leaderboard
 
-Evaluated tasks only:
+All benchmark tasks:
 
 | Rank | Model | Overall Score | Completed Tasks | Failed / Incomplete Tasks | Total Estimated Cost | Avg Cost / Task | Score / Dollar | High-Level Assessment |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 1 | CASSANDRA | 4.40 / 5 | 5 | 0 | $11.70684125 | $2.34136825 | 1.88 | Best quality so far: stronger Tasks 1, 4, and 5; tied Tasks 2 and 3. |
-| 2 | MEDEA | 4.10 / 5 | 5 | 0 | $3.79720360 | $0.75944072 | 5.40 | Lower cost with strong Task 2 and comparable Task 3 results. |
+| 1 | CASSANDRA | 4.33 / 5 | 6 | 0 | $13.41271225 | $2.23545204 | 1.94 | Best overall quality: stronger Tasks 1, 4, and 5; tied Tasks 2, 3, and 6. |
+| 2 | MEDEA | 4.08 / 5 | 6 | 0 | $6.96996790 | $1.16166132 | 3.52 | Lower cost with strong Task 2, comparable Task 3, and reproducible Task 6 tests. |
 
 ## 4. Category Score Matrix
 
 | Model | Algorithm | Bug Fix | Frontend UI | PR Review | Code Analysis | Test Generation | Average |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| CASSANDRA | 4.5 | 4.5 | 4.0 | 4.5 | 4.5 | pending | 4.40 |
-| MEDEA | 4.0 | 4.5 | 4.0 | 4.0 | 4.0 | pending | 4.10 |
+| CASSANDRA | 4.5 | 4.5 | 4.0 | 4.5 | 4.5 | 4.0 | 4.33 |
+| MEDEA | 4.0 | 4.5 | 4.0 | 4.0 | 4.0 | 4.0 | 4.08 |
 
 ## 5. Pricing And Cost Efficiency
 
@@ -110,26 +119,26 @@ When `session.json` provides an explicit total cost, this report uses that value
 
 ### 5.3 Cost Matrix
 
-Evaluated tasks only:
+All benchmark tasks:
 
 | Model | Algorithm | Bug Fix | Frontend UI | PR Review | Code Analysis | Test Generation | Total Cost |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| CASSANDRA | $1.02698425 | $2.54097225 | $3.60787025 | $2.57206650 | $1.95894800 | pending | $11.70684125 |
-| MEDEA | $0.26224780 | $1.56984270 | $0.61809385 | $0.79119515 | $0.55582410 | pending | $3.79720360 |
+| CASSANDRA | $1.02698425 | $2.54097225 | $3.60787025 | $2.57206650 | $1.95894800 | $1.70587100 | $13.41271225 |
+| MEDEA | $0.26224780 | $1.56984270 | $0.61809385 | $0.79119515 | $0.55582410 | $3.17276430 | $6.96996790 |
 
 ### 5.4 Cost-Quality Comparison
 
 | Model | Average Score | Total Cost | Completed Tasks | Avg Cost / Completed Task | Score / Dollar | Cost-Adjusted Assessment |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| CASSANDRA | 4.40 / 5 | $11.70684125 | 5 | $2.34136825 | 1.88 | Best average quality so far, but substantially higher cost. |
-| MEDEA | 4.10 / 5 | $3.79720360 | 5 | $0.75944072 | 5.40 | Strongest cost-adjusted result across the evaluated tasks. |
+| CASSANDRA | 4.33 / 5 | $13.41271225 | 6 | $2.23545204 | 1.94 | Best average quality, but substantially higher cost. |
+| MEDEA | 4.08 / 5 | $6.96996790 | 6 | $1.16166132 | 3.52 | Strongest cost-adjusted result across the full benchmark. |
 
 **Comparison Notes**
 
-- Quality premium: CASSANDRA delivered the stronger Task 1, Task 4, and Task 5 results, and tied Task 2 and Task 3 quality.
-- Cost efficiency: MEDEA has the higher score-per-dollar across the five evaluated tasks.
-- Token profile: CASSANDRA Task 3 cost is the largest evaluated CASSANDRA task so far at $3.60787025; MEDEA Task 2 consumed the largest cache-hit volume with 6,577,213 cache-hit tokens.
-- Practical recommendation for Task 1: CASSANDRA for quality, MEDEA for cost-sensitive runs where moderate scalability risk is acceptable.
+- Quality premium: CASSANDRA delivered the stronger Task 1, Task 4, and Task 5 results, and tied Task 2, Task 3, and Task 6 quality.
+- Cost efficiency: MEDEA has the higher score-per-dollar across the six evaluated tasks.
+- Token profile: CASSANDRA Task 3 is its largest-cost task at $3.60787025; MEDEA Task 6 is its largest-cost task at $3.17276430 and consumed 15,586,037 cache-hit tokens.
+- Practical recommendation: CASSANDRA for highest expected quality, MEDEA for cost-sensitive runs where its maintainability and source-discipline risks are acceptable.
 
 ## 6. Category-by-Category Comparison
 
@@ -218,7 +227,19 @@ Evaluated tasks only:
 
 ### 6.6 Test Generation
 
-Pending.
+**Winner:** Tie
+
+| Model | Score | Coverage Improvement | Behavioral Correctness | Edge Case Quality | Integration With Existing Tests | Report Quality |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| CASSANDRA | 4.0 | 4.5 | 4.0 | 4.5 | 2.5 | 4.0 |
+| MEDEA | 4.0 | 4.5 | 4.0 | 4.0 | 4.0 | 4.0 |
+
+**Comparison Notes**
+
+- Coverage: Both models report coverage above the task threshold. CASSANDRA reports 99.8% line / 96.9% branch for the targeted password-policy classes, with 93.7% line / 82.6% branch for the wider package including blacklist infrastructure. MEDEA reports 94.8% line / 94.2% branch for `org.keycloak.policy` and 100% line / branch for `PasswordPolicy`.
+- Test design: CASSANDRA's seven focused test classes are easier to navigate and map cleanly to validators, factories, manager behavior, history/age, and model parsing. MEDEA's two comprehensive classes cover a lot of behavior but are large, reflection-heavy, and proxy-heavy.
+- Local verification: MEDEA's targeted offline Maven run passed locally with 46 tests and `BUILD SUCCESS`. CASSANDRA's targeted offline Maven run reached the tests but failed during Mockito setup because the local JDK could not initialize Mockito's inline Byte Buddy mock maker.
+- Main differentiator: CASSANDRA is cleaner test engineering if the Mockito/JVM-agent dependency works; MEDEA is more reproducible in this evaluator environment but less maintainable.
 
 ## 7. Task-Level Evidence
 
@@ -428,6 +449,63 @@ pnpm exec eslint apps/admin-ui/src/organizations/DetailOrganization.tsx apps/adm
 - Strengths: Comprehensive, source-grounded, required Mermaid diagrams included, strong session/required-action model, good uncertainty labeling.
 - Weaknesses: OIDC-focused; SAML protocol completion and cache/concurrency internals are not deeply traced.
 - Risk: Low. The central lifecycle claims were spot-checked against the pinned worktree and match the source.
+
+#### 06_test_generation / task_001
+
+| Field | Value |
+| --- | --- |
+| Worktree branch | `bench/CASSANDRA/06_test_generation/task_001` |
+| Result file | `models/CASSANDRA/06_test_generation/task_001/result.md` |
+| Score file | `models/CASSANDRA/06_test_generation/task_001/score.md` |
+| Overall score | 4.0 / 5 |
+| Status | completed |
+| Input tokens | 222 |
+| Output tokens | 87068 |
+| Reasoning tokens | 0 |
+| Cache write tokens | 287831 |
+| Cache hit tokens | 13874278 |
+| Total tokens | 14249399 |
+| Estimated cost | $1.70587100 |
+
+**Files Changed**
+
+- `server-spi-private/pom.xml`: adds test-scope Mockito and a JaCoCo-friendly `jacocoArgLine` placeholder.
+- `server-spi-private/src/test/java/org/keycloak/policy/CharacterAndLengthPasswordPolicyProviderTest.java`: character, regex, length, and maximum-length validator tests.
+- `server-spi-private/src/test/java/org/keycloak/policy/UserAttributePasswordPolicyProviderTest.java`: username/email exclusion tests.
+- `server-spi-private/src/test/java/org/keycloak/policy/HistoryAndAgePasswordPolicyProviderTest.java`: password history and age tests.
+- `server-spi-private/src/test/java/org/keycloak/policy/PasswordPolicyProviderFactoryTest.java`: factory metadata and parse-config tests.
+- `server-spi-private/src/test/java/org/keycloak/policy/PasswordPolicyModelTest.java`: `PasswordPolicy` parse/build/accessor tests.
+- `server-spi-private/src/test/java/org/keycloak/policy/DefaultPasswordPolicyManagerProviderTest.java`: manager iteration and first-error behavior.
+- `server-spi-private/src/test/java/org/keycloak/policy/BlacklistPasswordPolicyProviderValidateTest.java`: blacklist validate-path tests.
+
+**Commands / Evidence Reported By Agent**
+
+```text
+mvn -o -pl server-spi-private test -Dtest='<password policy test list>'
+Tests run: 127, Failures: 0, Errors: 0, Skipped: 0
+JaCoCo targeted coverage: 99.8% line / 96.9% branch
+```
+
+**Evaluator Verification**
+
+```text
+mvn -o -pl server-spi-private test -Dtest='<same password policy test list>'
+Tests run: 127, Failures: 0, Errors: 100, Skipped: 0
+BUILD FAILURE
+```
+
+The local evaluator failure was an infrastructure failure before assertions ran:
+
+```text
+Could not initialize inline Byte Buddy mock maker.
+It appears as if your JDK does not supply a working agent attachment mechanism.
+```
+
+**Evaluator Notes**
+
+- Strengths: Best-structured Task 6 submission: seven focused test classes, specific error assertions, broad behavior coverage, and very high reported targeted coverage.
+- Weaknesses: Reproducibility depends on Mockito inline / Byte Buddy agent attachment; the evaluator rerun failed on this JDK. A `.omo/` run artifact was also left untracked in the worktree.
+- Risk: Moderate. The test design is strong, but the submitted test stack needs environment hardening or non-inline mocking to be reliably usable.
 
 ### 7.2 MEDEA
 
@@ -643,41 +721,86 @@ No targeted ESLint or frontend test command was run because this MEDEA worktree 
 - Weaknesses: Did not use the task worktree; source-reference discipline is weaker and some reset/action-token details are inferred rather than deeply verified.
 - Risk: Moderate. The main lifecycle is accurate, but the report is less reliable as a pinned-worktree analysis artifact than CASSANDRA's.
 
+#### 06_test_generation / task_001
+
+| Field | Value |
+| --- | --- |
+| Worktree branch | `bench/MEDEA/06_test_generation/task_001` |
+| Result file | `models/MEDEA/06_test_generation/task_001/result.md` |
+| Score file | `models/MEDEA/06_test_generation/task_001/score.md` |
+| Overall score | 4.0 / 5 |
+| Status | completed |
+| Input tokens | 389954 |
+| Output tokens | 57846 |
+| Reasoning tokens | 23899 |
+| Cache write tokens | 0 |
+| Cache hit tokens | 15586037 |
+| Total tokens | 16057736 |
+| Estimated cost | $3.17276430 |
+
+**Files Changed**
+
+- `server-spi/src/test/java/org/keycloak/models/PasswordPolicyComprehensiveTest.java`: `PasswordPolicy` builder, parser, getters, clone, `toBuilder`, and malformed-input tests.
+- `server-spi-private/src/test/java/org/keycloak/policy/PasswordPolicyComprehensiveTest.java`: providers, factories, manager, blacklist file handling, history/age, SPI, combined policies, and edge-case tests.
+
+**Commands / Evidence Reported By Agent**
+
+```text
+mvn test -pl server-spi,server-spi-private -am -Dtest=org.keycloak.models.PasswordPolicyComprehensiveTest,org.keycloak.policy.PasswordPolicyComprehensiveTest,org.keycloak.policy.BlacklistPasswordPolicyProviderTest,org.keycloak.policy.NotEmailPasswordPolicyProviderTest -DfailIfNoTests=false -o
+Final combined run: BUILD SUCCESS
+JaCoCo coverage: org.keycloak.policy 94.8% line / 94.2% branch; PasswordPolicy 100% line / 100% branch
+```
+
+**Evaluator Verification**
+
+```text
+mvn test -pl server-spi,server-spi-private -am -Dtest=org.keycloak.models.PasswordPolicyComprehensiveTest,org.keycloak.policy.PasswordPolicyComprehensiveTest,org.keycloak.policy.BlacklistPasswordPolicyProviderTest,org.keycloak.policy.NotEmailPasswordPolicyProviderTest -DfailIfNoTests=false -o
+server-spi: Tests run: 8, Failures: 0, Errors: 0, Skipped: 0
+server-spi-private: Tests run: 46, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+```
+
+**Evaluator Notes**
+
+- Strengths: Meets reported coverage target, passes the targeted offline evaluator run, avoids production and final POM changes, and covers blacklist infrastructure more deeply than CASSANDRA.
+- Weaknesses: Tests are concentrated in two very large classes and rely heavily on reflection and dynamic proxies, making them harder to maintain and more coupled to implementation internals.
+- Risk: Moderate. The tests are reproducible locally, but their size and reflection-heavy style increase long-term maintenance risk.
+
 ## 8. Direct Model-vs-Model Findings
 
 ### 8.1 Strengths Comparison
 
 | Area | CASSANDRA | MEDEA | Better |
 | --- | --- | --- | --- |
-| Code navigation | Used expected workspaces for Tasks 1, 2, 3, 4, and 5. | Used expected workspaces for Tasks 1-4; Task 5 used `upstream/keycloak` instead of the task worktree. | CASSANDRA |
-| Java / frontend implementation quality | Strong Task 1, focused Task 2 fix, native Task 3 tab integration. | Good Task 1, broad Task 2 provider-level fix, comparable Task 3 tab integration. | CASSANDRA |
-| Keycloak-specific understanding | Strong Task 2 certificate-provider understanding, Task 3 Admin Console fit, Task 4 OIDC scope review, and Task 5 auth-flow analysis. | Strong Task 2 certificate-provider understanding, Task 3 Admin Console fit, broad Task 4 grant-path review, and good Task 5 auth-flow coverage. | CASSANDRA |
-| Testing instinct | Strong Task 1 validation, strong Task 2 tests, useful but limited Task 3 tests. | Good Task 1 validation, strong Task 2 provider tests, useful but limited Task 3 tests. | CASSANDRA |
+| Code navigation | Used expected workspaces for all six tasks. | Used expected workspaces for Tasks 1-4 and 6; Task 5 used `upstream/keycloak` instead of the task worktree. | CASSANDRA |
+| Java / frontend implementation quality | Strong Task 1, focused Task 2 fix, native Task 3 tab integration, and cleaner Task 6 test structure. | Good Task 1, broad Task 2 provider-level fix, comparable Task 3 tab integration, and reproducible Task 6 tests. | CASSANDRA |
+| Keycloak-specific understanding | Strong Task 2 certificate-provider understanding, Task 3 Admin Console fit, Task 4 OIDC scope review, Task 5 auth-flow analysis, and Task 6 password-policy coverage mapping. | Strong Task 2 certificate-provider understanding, Task 3 Admin Console fit, broad Task 4 grant-path review, good Task 5 auth-flow coverage, and broad Task 6 password-policy coverage. | CASSANDRA |
+| Testing instinct | Strong Task 1 validation, strong Task 2 tests, useful Task 3 tests, and focused Task 6 test design with a reproducibility caveat. | Good Task 1 validation, strong Task 2 provider tests, useful Task 3 tests, and Task 6 tests that pass locally but are less maintainable. | Tie |
 | Review severity discipline | Strong Task 4 issue prioritization with well-labeled inference. | Useful Task 4 findings, but one over-severe P1 claim. | CASSANDRA |
 | Analysis discipline | Strong Task 5 source-grounded lifecycle model with explicit uncertainty labels. | Good Task 5 breadth, but weaker workspace/source discipline. | CASSANDRA |
 | Debugging/root cause analysis | Strong Task 1 reasoning, Task 4 security-flow tracing, and Task 5 lifecycle tracing. | Strong Task 2 root cause analysis and broad Task 4/5 path tracing. | CASSANDRA |
 | Report clarity | Detailed task reports after token updates. | Detailed task reports after token updates. | Tie |
-| Command usage discipline | Targeted Task 1 commands and targeted Task 3 lint verification. | Targeted Task 2 Maven tests; Task 1 had minor artifact cleanliness issue and Task 3 lacked local JS dependencies. | CASSANDRA |
+| Command usage discipline | Targeted Task 1 commands and targeted Task 3 lint verification; Task 6 reported commands were not reproducible locally due Mockito/JDK attachment. | Targeted Task 2 Maven tests and Task 6 offline test rerun passed locally; Task 1 had minor artifact cleanliness issue and Task 3 lacked local JS dependencies. | Tie |
 
 ### 8.2 Failure Mode Comparison
 
 | Failure Mode | CASSANDRA | MEDEA | Notes |
 | --- | --- | --- | --- |
 | Over-broad changes | Minor compatibility/scope caveat | Minor artifact/scope issue | CASSANDRA changes Elytron full-DN behavior; MEDEA Task 1 reported compiled `out/` and Task 2 changes more cert paths. |
-| Missed edge cases | Low evidence | Low-to-moderate evidence | Both tested edge cases; CASSANDRA's explicit edge suite is stronger. |
+| Missed edge cases | Low evidence | Low-to-moderate evidence | Both tested edge cases; CASSANDRA's explicit edge suite is stronger, while MEDEA's Task 6 covers blacklist infrastructure more deeply. |
 | Hallucinated APIs/classes | No evidence | No evidence | No unsupported APIs/classes observed in evaluated task outputs. |
-| Weak validation | No for Task 1; Tasks 4-5 review/analysis validation was static. | No for Task 2; partial for Task 1; Tasks 4-5 review/analysis validation was static. | MEDEA Task 2 validation is solid; Task 1 lacks CASSANDRA-scale stress. |
+| Weak validation | No for Task 1; Tasks 4-5 review/analysis validation was static; Task 6 failed evaluator rerun due Mockito/JDK attachment. | No for Task 2 or Task 6; partial for Task 1; Tasks 4-5 review/analysis validation was static. | MEDEA Task 6 was more reproducible locally; Task 1 lacks CASSANDRA-scale stress. |
 | Overstated review finding | No major instance observed. | One Task 4 P1 impact partly overclaimed. | MEDEA's client-credentials/null-user claim is useful but not confirmed at P1 severity. |
 | Workspace mismatch | No major instance observed. | Task 5 did not use the required task worktree. | MEDEA used `upstream/keycloak` and noted possible drift. |
 | Poor report detail | No | No | Both final reports are usable. |
-| Incomplete task | No for evaluated Tasks 1-5 | No for evaluated Tasks 1-5 | No evaluated submissions are incomplete. |
+| Incomplete task | No | No | All six submissions for both models are complete. |
 
 ### 8.3 Reliability Assessment
 
 | Model | Reliability Rating | Evidence |
 | --- | ---: | --- |
-| CASSANDRA | 4.40 / 5 | Completed Tasks 1-5 with code/review/analysis outputs, tests where applicable, result reports, and token logs; strongest current evidence is Task 1 plus Task 4/5 analysis quality. |
-| MEDEA | 4.10 / 5 | Completed Tasks 1-5 with code/review/analysis outputs, tests where applicable, result reports, and token logs; strongest current evidence is the Task 2 bug fix plus comparable Task 3 integration. |
+| CASSANDRA | 4.33 / 5 | Completed all six tasks with code/review/analysis outputs, tests where applicable, result reports, and token logs; strongest evidence is Task 1 plus Task 4/5 analysis quality, with a Task 6 reproducibility caveat. |
+| MEDEA | 4.08 / 5 | Completed all six tasks with code/review/analysis outputs, tests where applicable, result reports, and token logs; strongest evidence is the Task 2 bug fix, comparable Task 3 integration, and locally passing Task 6 tests. |
 
 ## 9. Score Rationale
 
@@ -699,10 +822,12 @@ product fit, Admin Console integration, workflow completeness, state/error handl
 verification. PR review emphasizes critical issue detection, accuracy, changed-area coverage,
 false-positive control, and actionability. Code analysis emphasizes code-path accuracy, diagram
 quality, required-action understanding, security/edge-case coverage, and source-reference quality.
+Test generation emphasizes coverage improvement, behavioral correctness, edge-case quality,
+integration with existing tests, and report quality.
 
 ## 10. Final Recommendation
 
-Evaluated tasks:
+All benchmark tasks:
 
 | Use Case | Recommended Model | Reason |
 | --- | --- | --- |
@@ -712,19 +837,21 @@ Evaluated tasks:
 | UI work | Tie | Both completed Task 3 with a routable organization Invitations tab and added frontend/admin-client tests. |
 | PR review | CASSANDRA | Better severity discipline and fewer overclaims in Task 4. |
 | Codebase analysis | CASSANDRA | More source-grounded Task 5 analysis and correct task worktree usage. |
-| Test generation | pending | Not evaluated in this report update. |
-| Overall coding agent | CASSANDRA so far | Higher average score across currently evaluated tasks. |
+| Test generation | Tie | CASSANDRA has cleaner focused tests; MEDEA has locally reproducible tests. |
+| Overall coding agent | CASSANDRA | Higher average score across all six tasks. |
 
 ## 11. Caveats And Follow-Ups
 
-- This report currently covers `01_algorithm/task_001`, `02_bug_fix/task_001`, `03_frontend_ui/task_001`, `04_pr_review/task_001`, and `05_code_analysis/task_001` for both models.
+- This report covers all six benchmark tasks for both models.
 - MEDEA's `session.json` includes 18,919 reasoning tokens. The public model rate card does not specify separate reasoning or cache pricing, so the report uses the total session cost directly.
 - MEDEA Task 2's `session.json` includes 9,609 reasoning tokens and 6,577,213 cache-hit tokens. The report uses the total session cost directly.
 - MEDEA Task 3's `session.json` includes 5,710 reasoning tokens and 2,321,709 cache-hit tokens. The report uses the total session cost directly.
 - MEDEA Task 4's `session.json` includes 12,448 reasoning tokens and 2,847,096 cache-hit tokens. The report uses the total session cost directly.
 - MEDEA Task 5's `session.json` includes 979 reasoning tokens and 1,967,599 cache-hit tokens. The report uses the total session cost directly.
+- MEDEA Task 6's `session.json` includes 23,899 reasoning tokens and 15,586,037 cache-hit tokens. The report uses the total session cost directly.
 - CASSANDRA Task 2's `session.json` includes 109,445 cache-write tokens and 2,472,112 cache-hit tokens.
 - CASSANDRA Task 3's `session.json` includes 96,715 cache-write tokens and 4,340,223 cache-hit tokens.
 - CASSANDRA Task 4's `session.json` includes 97,168 cache-write tokens and 2,266,013 cache-hit tokens.
 - CASSANDRA Task 5's `session.json` includes 114,562 cache-write tokens and 1,005,271 cache-hit tokens.
-- The Test Generation category should be evaluated before drawing an overall benchmark conclusion across all six tasks.
+- CASSANDRA Task 6's `session.json` includes 287,831 cache-write tokens and 13,874,278 cache-hit tokens.
+- CASSANDRA Task 6 did not rerun cleanly in this evaluator environment because Mockito inline Byte Buddy attachment failed on the local JDK. This was scored as an integration/reproducibility risk, not as a demonstrated password-policy assertion failure.
