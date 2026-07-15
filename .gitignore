@@ -10,3 +10,7 @@ Thumbs.db
 
 # Local upstream source clones used to create worktrees
 upstream/
+
+# Local coding agent session logs
+session.json
+**/session.json
