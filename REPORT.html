@@ -1,0 +1,1157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Coding Agent Evaluation Report</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --panel-2: #f0f4f7;
+      --ink: #18202a;
+      --muted: #647181;
+      --line: #d8dee6;
+      --line-strong: #b9c3cf;
+      --cass: #1f6f8b;
+      --cass-soft: #d9edf4;
+      --medea: #9a5a20;
+      --medea-soft: #f4e4d3;
+      --green: #217a4b;
+      --amber: #9b650f;
+      --red: #a33a3a;
+      --shadow: 0 10px 30px rgba(21, 31, 44, 0.08);
+      --radius: 8px;
+      --max: 1180px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.45;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    .shell {
+      min-height: 100vh;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(12px);
+    }
+
+    .topbar-inner {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 12px 20px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .mark {
+      width: 34px;
+      height: 34px;
+      border-radius: var(--radius);
+      display: grid;
+      place-items: center;
+      background: #152232;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0;
+      flex: 0 0 auto;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.1;
+    }
+
+    .brand p {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .btn,
+    .tab {
+      border: 1px solid var(--line-strong);
+      background: #fff;
+      color: var(--ink);
+      border-radius: var(--radius);
+      padding: 8px 10px;
+      cursor: pointer;
+      min-height: 36px;
+    }
+
+    .btn:hover,
+    .tab:hover {
+      border-color: #8694a4;
+      background: #f8fafc;
+    }
+
+    .btn.primary {
+      background: #18202a;
+      border-color: #18202a;
+      color: #fff;
+    }
+
+    main {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 22px 20px 54px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+      gap: 18px;
+      align-items: stretch;
+      margin-bottom: 18px;
+    }
+
+    .hero-main,
+    .hero-side,
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .hero-main {
+      padding: 24px;
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .hero-main h2 {
+      margin: 0;
+      font-size: clamp(30px, 4vw, 52px);
+      line-height: 1.02;
+      letter-spacing: 0;
+    }
+
+    .hero-main .lead {
+      max-width: 760px;
+      margin: 16px 0 0;
+      font-size: 17px;
+      color: #394554;
+    }
+
+    .winner-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-top: 18px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 9px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: #263241;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .pill.cass { background: var(--cass-soft); border-color: #b5d6e2; color: #164b61; }
+    .pill.medea { background: var(--medea-soft); border-color: #e1c39c; color: #6a3f18; }
+    .pill.tie { background: #e8edf2; border-color: #cbd5df; color: #3b4858; }
+    .pill.warn { background: #f8edce; border-color: #e7c983; color: #704a09; }
+
+    .hero-side {
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .score-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px;
+      background: #fff;
+    }
+
+    .score-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .score-head strong {
+      font-size: 14px;
+    }
+
+    .score-value {
+      font-size: 28px;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .meter {
+      height: 10px;
+      border-radius: 999px;
+      background: #e8edf2;
+      overflow: hidden;
+      margin: 10px 0 8px;
+    }
+
+    .meter span {
+      display: block;
+      height: 100%;
+      border-radius: 999px;
+      background: var(--cass);
+      width: var(--w);
+    }
+
+    .meter.medea span { background: var(--medea); }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin: 18px 0;
+    }
+
+    .metric {
+      padding: 14px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .metric .label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .metric .value {
+      margin-top: 8px;
+      font-size: 25px;
+      font-weight: 800;
+    }
+
+    .metric .note {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin: 18px 0 14px;
+      flex-wrap: wrap;
+    }
+
+    .tab[aria-selected="true"] {
+      background: #18202a;
+      border-color: #18202a;
+      color: #fff;
+    }
+
+    .section {
+      display: none;
+    }
+
+    .section.active {
+      display: block;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .panel {
+      padding: 18px;
+      margin-bottom: 14px;
+    }
+
+    .panel h3,
+    .panel h4 {
+      margin: 0 0 10px;
+      line-height: 1.15;
+    }
+
+    .panel h3 {
+      font-size: 20px;
+    }
+
+    .panel h4 {
+      font-size: 15px;
+    }
+
+    .subtle {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 720px;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      padding: 10px 11px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      background: #f1f5f9;
+      color: #354252;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .bars {
+      display: grid;
+      gap: 10px;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 140px minmax(150px, 1fr) 84px;
+      gap: 10px;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .bar-track {
+      height: 14px;
+      background: #e8edf2;
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid #d9e0e8;
+    }
+
+    .bar-fill {
+      height: 100%;
+      width: var(--w);
+      background: var(--cass);
+    }
+
+    .bar-fill.medea { background: var(--medea); }
+    .bar-fill.green { background: var(--green); }
+    .bar-fill.amber { background: var(--amber); }
+
+    .task-toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .task-toolbar input,
+    .task-toolbar select {
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      padding: 9px 10px;
+      background: #fff;
+      min-height: 38px;
+    }
+
+    .task-toolbar input {
+      min-width: min(100%, 300px);
+    }
+
+    .accordion {
+      display: grid;
+      gap: 10px;
+    }
+
+    details {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 4px 16px rgba(21, 31, 44, 0.05);
+    }
+
+    summary {
+      cursor: pointer;
+      padding: 14px 16px;
+      list-style: none;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+    }
+
+    summary::-webkit-details-marker { display: none; }
+
+    summary .title {
+      font-weight: 800;
+      display: flex;
+      gap: 9px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    summary .meta {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 4px;
+    }
+
+    .details-body {
+      padding: 0 16px 16px;
+      border-top: 1px solid var(--line);
+      display: grid;
+      gap: 12px;
+    }
+
+    .details-body ul {
+      margin: 8px 0 0;
+      padding-left: 18px;
+    }
+
+    .details-body li {
+      margin: 4px 0;
+    }
+
+    .quote {
+      border-left: 4px solid var(--line-strong);
+      background: #f6f8fa;
+      padding: 10px 12px;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      color: #394554;
+      font-size: 13px;
+    }
+
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .model-panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px;
+      background: #fff;
+    }
+
+    .model-panel.cass { border-top: 4px solid var(--cass); }
+    .model-panel.medea { border-top: 4px solid var(--medea); }
+
+    .model-panel h4 {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: baseline;
+    }
+
+    .callout {
+      border: 1px solid #e7c983;
+      background: #fff8e8;
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      color: #5c420b;
+      font-size: 13px;
+    }
+
+    .print-only {
+      display: none;
+    }
+
+    @media (max-width: 900px) {
+      .hero,
+      .grid-2,
+      .grid-3,
+      .compare,
+      .meta-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .bar-row {
+        grid-template-columns: 1fr;
+      }
+
+      .actions {
+        display: none;
+      }
+    }
+
+    @media print {
+      body { background: #fff; }
+      .topbar,
+      .tabs,
+      .task-toolbar,
+      .btn { display: none !important; }
+      main { padding: 0; max-width: none; }
+      .section { display: block !important; break-inside: auto; }
+      .panel,
+      .hero-main,
+      .hero-side,
+      .metric,
+      details {
+        box-shadow: none;
+        break-inside: avoid;
+      }
+      details:not([open]) .details-body { display: block; }
+      .print-only { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <div class="mark">CB</div>
+          <div>
+            <h1>Coding Agent Evaluation</h1>
+            <p>Six-task benchmark comparison, generated from REPORT.md</p>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn" type="button" data-action="expand">Expand all</button>
+          <button class="btn" type="button" data-action="collapse">Collapse all</button>
+          <button class="btn primary" type="button" onclick="window.print()">Print / PDF</button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" aria-label="Executive summary">
+        <div class="hero-main">
+          <p class="eyebrow">Final result</p>
+          <h2>CASSANDRA leads overall; MEDEA wins cost efficiency.</h2>
+          <p class="lead">
+            Across all six benchmark tasks, CASSANDRA delivered the higher average quality score
+            with stronger Algorithm, PR Review, and Code Analysis results. MEDEA remained materially
+            cheaper and had the most reproducible Task 6 test run in this evaluator environment.
+          </p>
+          <div class="winner-row">
+            <span class="pill cass">Overall leader: CASSANDRA</span>
+            <span class="pill medea">Cost leader: MEDEA</span>
+            <span class="pill tie">Ties: Bug Fix, UI, Test Generation</span>
+            <span class="pill warn">Task 6 caveat: CASSANDRA Mockito/JDK rerun issue</span>
+          </div>
+        </div>
+
+        <aside class="hero-side" aria-label="Model scores">
+          <div class="score-card">
+            <div class="score-head">
+              <strong>CASSANDRA</strong>
+              <span class="score-value">4.33</span>
+            </div>
+            <div class="meter" aria-label="CASSANDRA score 4.33 out of 5"><span style="--w:86.6%"></span></div>
+            <div class="subtle">$13.41271225 total cost, $2.23545204 per task</div>
+          </div>
+          <div class="score-card">
+            <div class="score-head">
+              <strong>MEDEA</strong>
+              <span class="score-value">4.08</span>
+            </div>
+            <div class="meter medea" aria-label="MEDEA score 4.08 out of 5"><span style="--w:81.6%"></span></div>
+            <div class="subtle">$6.96996790 total cost, $1.16166132 per task</div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="meta-grid" aria-label="Key metrics">
+        <div class="metric">
+          <div class="label">Tasks evaluated</div>
+          <div class="value">6 / 6</div>
+          <div class="note">Algorithm, Bug Fix, Frontend UI, PR Review, Code Analysis, Test Generation</div>
+        </div>
+        <div class="metric">
+          <div class="label">Quality gap</div>
+          <div class="value">+0.25</div>
+          <div class="note">CASSANDRA average score advantage</div>
+        </div>
+        <div class="metric">
+          <div class="label">Cost gap</div>
+          <div class="value">1.93x</div>
+          <div class="note">CASSANDRA total cost versus MEDEA</div>
+        </div>
+        <div class="metric">
+          <div class="label">Score per dollar</div>
+          <div class="value">3.52</div>
+          <div class="note">MEDEA leads cost-adjusted result</div>
+        </div>
+      </section>
+
+      <nav class="tabs" aria-label="Report sections">
+        <button class="tab" type="button" data-tab="overview" aria-selected="true">Overview</button>
+        <button class="tab" type="button" data-tab="scores" aria-selected="false">Scores</button>
+        <button class="tab" type="button" data-tab="costs" aria-selected="false">Costs</button>
+        <button class="tab" type="button" data-tab="tasks" aria-selected="false">Task Details</button>
+        <button class="tab" type="button" data-tab="recommendations" aria-selected="false">Recommendations</button>
+      </nav>
+
+      <section class="section active" id="overview">
+        <div class="grid-2">
+          <article class="panel">
+            <h3>What to tell leadership</h3>
+            <p>
+              CASSANDRA is the stronger overall coding agent in this benchmark. It produced the
+              best results on the high-signal implementation, review, and architecture-analysis
+              tasks. MEDEA is the better budget option: it completed every task and delivered a
+              substantially better score-per-dollar.
+            </p>
+            <div class="callout">
+              Best operational read: use CASSANDRA where top quality and source discipline matter
+              most; use MEDEA for cost-sensitive runs when its maintainability and setup risks are
+              acceptable.
+            </div>
+          </article>
+
+          <article class="panel">
+            <h3>Win map</h3>
+            <div class="bars">
+              <div class="bar-row">
+                <strong>CASSANDRA wins</strong>
+                <div class="bar-track"><div class="bar-fill" style="--w:50%"></div></div>
+                <span class="num">3 tasks</span>
+              </div>
+              <div class="bar-row">
+                <strong>MEDEA wins</strong>
+                <div class="bar-track"><div class="bar-fill medea" style="--w:0%"></div></div>
+                <span class="num">0 tasks</span>
+              </div>
+              <div class="bar-row">
+                <strong>Ties</strong>
+                <div class="bar-track"><div class="bar-fill green" style="--w:50%"></div></div>
+                <span class="num">3 tasks</span>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <article class="panel">
+          <h3>Executive findings</h3>
+          <div class="grid-3">
+            <div>
+              <h4>Quality</h4>
+              <p class="subtle">CASSANDRA is stronger on Algorithm, PR Review, and Code Analysis. It ties on Bug Fix, Frontend UI, and Test Generation.</p>
+            </div>
+            <div>
+              <h4>Cost</h4>
+              <p class="subtle">MEDEA costs $6.96996790 across all tasks versus CASSANDRA at $13.41271225.</p>
+            </div>
+            <div>
+              <h4>Risk</h4>
+              <p class="subtle">CASSANDRA Task 6 has a local Mockito/JDK reproducibility caveat; MEDEA Task 5 used the wrong worktree.</p>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="section" id="scores">
+        <article class="panel">
+          <h3>Category score matrix</h3>
+          <p class="subtle">Scores are on the benchmark 1.0 to 5.0 scale.</p>
+          <div class="table-wrap">
+            <table data-sortable>
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th class="num">Algorithm</th>
+                  <th class="num">Bug Fix</th>
+                  <th class="num">Frontend UI</th>
+                  <th class="num">PR Review</th>
+                  <th class="num">Code Analysis</th>
+                  <th class="num">Test Generation</th>
+                  <th class="num">Average</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="pill cass">CASSANDRA</span></td>
+                  <td class="num">4.5</td>
+                  <td class="num">4.5</td>
+                  <td class="num">4.0</td>
+                  <td class="num">4.5</td>
+                  <td class="num">4.5</td>
+                  <td class="num">4.0</td>
+                  <td class="num"><strong>4.33</strong></td>
+                </tr>
+                <tr>
+                  <td><span class="pill medea">MEDEA</span></td>
+                  <td class="num">4.0</td>
+                  <td class="num">4.5</td>
+                  <td class="num">4.0</td>
+                  <td class="num">4.0</td>
+                  <td class="num">4.0</td>
+                  <td class="num">4.0</td>
+                  <td class="num"><strong>4.08</strong></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <div class="grid-2">
+          <article class="panel">
+            <h3>Score by category</h3>
+            <div class="bars" id="scoreBars"></div>
+          </article>
+          <article class="panel">
+            <h3>Category winners</h3>
+            <div class="table-wrap">
+              <table data-sortable>
+                <thead>
+                  <tr><th>Category</th><th>Winner</th><th>Rationale</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Algorithm</td><td>CASSANDRA</td><td>Better large-input validation and lower-allocation implementation.</td></tr>
+                  <tr><td>Bug Fix</td><td>Tie</td><td>Both fixed certificate subject construction with robust targeted tests.</td></tr>
+                  <tr><td>Frontend UI</td><td>Tie</td><td>Both made Invitations a routable organization tab.</td></tr>
+                  <tr><td>PR Review</td><td>CASSANDRA</td><td>Better severity discipline and fewer overclaims.</td></tr>
+                  <tr><td>Code Analysis</td><td>CASSANDRA</td><td>More source-grounded and used the correct task worktree.</td></tr>
+                  <tr><td>Test Generation</td><td>Tie</td><td>CASSANDRA cleaner; MEDEA more reproducible locally.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="costs">
+        <div class="grid-2">
+          <article class="panel">
+            <h3>Cost matrix</h3>
+            <div class="table-wrap">
+              <table data-sortable>
+                <thead>
+                  <tr>
+                    <th>Model</th>
+                    <th class="num">Algorithm</th>
+                    <th class="num">Bug Fix</th>
+                    <th class="num">Frontend UI</th>
+                    <th class="num">PR Review</th>
+                    <th class="num">Code Analysis</th>
+                    <th class="num">Test Generation</th>
+                    <th class="num">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="pill cass">CASSANDRA</span></td>
+                    <td class="num">$1.02698425</td>
+                    <td class="num">$2.54097225</td>
+                    <td class="num">$3.60787025</td>
+                    <td class="num">$2.57206650</td>
+                    <td class="num">$1.95894800</td>
+                    <td class="num">$1.70587100</td>
+                    <td class="num"><strong>$13.41271225</strong></td>
+                  </tr>
+                  <tr>
+                    <td><span class="pill medea">MEDEA</span></td>
+                    <td class="num">$0.26224780</td>
+                    <td class="num">$1.56984270</td>
+                    <td class="num">$0.61809385</td>
+                    <td class="num">$0.79119515</td>
+                    <td class="num">$0.55582410</td>
+                    <td class="num">$3.17276430</td>
+                    <td class="num"><strong>$6.96996790</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="panel">
+            <h3>Cost efficiency</h3>
+            <div class="bars">
+              <div class="bar-row">
+                <strong>CASSANDRA total</strong>
+                <div class="bar-track"><div class="bar-fill" style="--w:100%"></div></div>
+                <span class="num">$13.41</span>
+              </div>
+              <div class="bar-row">
+                <strong>MEDEA total</strong>
+                <div class="bar-track"><div class="bar-fill medea" style="--w:52%"></div></div>
+                <span class="num">$6.97</span>
+              </div>
+              <div class="bar-row">
+                <strong>CASSANDRA score/$</strong>
+                <div class="bar-track"><div class="bar-fill" style="--w:55%"></div></div>
+                <span class="num">1.94</span>
+              </div>
+              <div class="bar-row">
+                <strong>MEDEA score/$</strong>
+                <div class="bar-track"><div class="bar-fill medea" style="--w:100%"></div></div>
+                <span class="num">3.52</span>
+              </div>
+            </div>
+            <p class="subtle">Score per dollar uses total score divided by total reported session cost.</p>
+          </article>
+        </div>
+
+        <article class="panel">
+          <h3>Token and cost caveats</h3>
+          <ul>
+            <li>When `session.json` provides explicit total cost, the report uses that value as task cost.</li>
+            <li>MEDEA's public rate card does not expose separate cache or reasoning pricing, so task costs use session totals directly.</li>
+            <li>Task 6 is MEDEA's largest-cost task at $3.17276430 and 15,586,037 cache-hit tokens.</li>
+            <li>Task 3 is CASSANDRA's largest-cost task at $3.60787025.</li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="section" id="tasks">
+        <div class="panel">
+          <div class="task-toolbar">
+            <div>
+              <h3>Task details</h3>
+              <p class="subtle">Search or filter to focus the evidence.</p>
+            </div>
+            <div>
+              <input id="taskSearch" type="search" placeholder="Search tasks, risks, winners">
+              <select id="winnerFilter" aria-label="Filter by winner">
+                <option value="all">All outcomes</option>
+                <option value="CASSANDRA">CASSANDRA wins</option>
+                <option value="MEDEA">MEDEA wins</option>
+                <option value="Tie">Ties</option>
+              </select>
+            </div>
+          </div>
+          <div class="accordion" id="taskList"></div>
+        </div>
+      </section>
+
+      <section class="section" id="recommendations">
+        <div class="grid-2">
+          <article class="panel">
+            <h3>Final recommendation</h3>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Use case</th><th>Recommended model</th><th>Reason</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Complex implementation</td><td>CASSANDRA</td><td>Stronger large-input validation and lower-allocation implementation.</td></tr>
+                  <tr><td>Cost-sensitive algorithm runs</td><td>MEDEA</td><td>Completed the task at lower reported session cost.</td></tr>
+                  <tr><td>Bug fixing</td><td>Tie</td><td>Both completed Task 2 with robust certificate-subject fixes.</td></tr>
+                  <tr><td>UI work</td><td>Tie</td><td>Both completed Task 3 with a routable organization Invitations tab.</td></tr>
+                  <tr><td>PR review</td><td>CASSANDRA</td><td>Better severity discipline and fewer overclaims.</td></tr>
+                  <tr><td>Codebase analysis</td><td>CASSANDRA</td><td>More source-grounded and correct worktree usage.</td></tr>
+                  <tr><td>Test generation</td><td>Tie</td><td>CASSANDRA cleaner; MEDEA locally reproducible.</td></tr>
+                  <tr><td>Overall coding agent</td><td>CASSANDRA</td><td>Higher average score across all six tasks.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="panel">
+            <h3>Residual risks</h3>
+            <ul>
+              <li>CASSANDRA Task 6 did not rerun cleanly locally because Mockito inline Byte Buddy attachment failed on the evaluator JDK.</li>
+              <li>MEDEA Task 5 did not use the required task worktree and instead analyzed `upstream/keycloak`.</li>
+              <li>Task 3 for both models was constrained because the pinned base already contained much of the invitation workflow.</li>
+              <li>The benchmark covers one task per category, so conclusions are strong for this run but not universal.</li>
+            </ul>
+          </article>
+        </div>
+
+        <article class="panel">
+          <h3>Presentation notes</h3>
+          <div class="quote">
+            Recommended summary: CASSANDRA is the better default for quality-critical engineering
+            work; MEDEA is a credible lower-cost option, especially when the work can tolerate more
+            review for maintainability and source-discipline issues.
+          </div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const scoreData = [
+      { category: "Algorithm", cassandra: 4.5, medea: 4.0, winner: "CASSANDRA" },
+      { category: "Bug Fix", cassandra: 4.5, medea: 4.5, winner: "Tie" },
+      { category: "Frontend UI", cassandra: 4.0, medea: 4.0, winner: "Tie" },
+      { category: "PR Review", cassandra: 4.5, medea: 4.0, winner: "CASSANDRA" },
+      { category: "Code Analysis", cassandra: 4.5, medea: 4.0, winner: "CASSANDRA" },
+      { category: "Test Generation", cassandra: 4.0, medea: 4.0, winner: "Tie" }
+    ];
+
+    const tasks = [
+      {
+        id: "01_algorithm",
+        title: "01 Algorithm: Temporal Dependency Router",
+        winner: "CASSANDRA",
+        cassandraScore: 4.5,
+        medeaScore: 4.0,
+        costCassandra: "$1.02698425",
+        costMedea: "$0.26224780",
+        summary: "Both implemented temporal Dijkstra with dominance pruning. CASSANDRA used more performance-oriented primitive data structures and stronger stress validation.",
+        cassandra: ["CSR adjacency and primitive arrays", "Manual binary heap", "Large stress tests and 500 randomized differential checks"],
+        medea: ["Functional implementation", "1000 randomized small-graph checks", "Object-heavy design with scalability caveat"]
+      },
+      {
+        id: "02_bug_fix",
+        title: "02 Bug Fix: SAML Certificate Subject",
+        winner: "Tie",
+        cassandraScore: 4.5,
+        medeaScore: 4.5,
+        costCassandra: "$2.54097225",
+        costMedea: "$1.56984270",
+        summary: "Both fixed unsafe X.500 subject construction and added targeted certificate tests.",
+        cassandra: ["Focused builder-based fix", "Strong CN round-trip tests", "Negative verification against original bug"],
+        medea: ["Broader provider coverage", "Preserves more Elytron CN compatibility", "Default-provider test independently verified"]
+      },
+      {
+        id: "03_frontend_ui",
+        title: "03 Frontend UI: Organization Invitations",
+        winner: "Tie",
+        cassandraScore: 4.0,
+        medeaScore: 4.0,
+        costCassandra: "$3.60787025",
+        costMedea: "$0.61809385",
+        summary: "Both promoted Invitations to a first-class routable organization tab. Net new workflow was limited because the base already had much of the feature.",
+        cassandra: ["Native Admin Console routing", "Targeted ESLint verification", "Playwright/admin-client tests added"],
+        medea: ["Comparable tab integration", "Small refresh/filter improvement", "Could not lint locally due missing JS dependencies"]
+      },
+      {
+        id: "04_pr_review",
+        title: "04 PR Review: Keycloak PR #50650",
+        winner: "CASSANDRA",
+        cassandraScore: 4.5,
+        medeaScore: 4.0,
+        costCassandra: "$2.57206650",
+        costMedea: "$0.79119515",
+        summary: "Both understood the parameterized-scope security change. CASSANDRA had better severity discipline and fewer overclaims.",
+        cassandra: ["Accurate null-user/session risk framing", "Good indistinguishability test-gap finding", "Clear severity discipline"],
+        medea: ["Broad grant-path coverage", "Useful test-gap list", "One P1 client-credentials claim partly overclaimed"]
+      },
+      {
+        id: "05_code_analysis",
+        title: "05 Code Analysis: Browser Auth and Required Actions",
+        winner: "CASSANDRA",
+        cassandraScore: 4.5,
+        medeaScore: 4.0,
+        costCassandra: "$1.95894800",
+        costMedea: "$0.55582410",
+        summary: "Both covered the browser authentication lifecycle. CASSANDRA was more source-grounded and used the required pinned worktree.",
+        cassandra: ["Clean OIDC lifecycle model", "Required Mermaid diagrams", "Uncertainty clearly labeled"],
+        medea: ["Broad architecture coverage", "Useful edge cases", "Analyzed upstream clone instead of task worktree"]
+      },
+      {
+        id: "06_test_generation",
+        title: "06 Test Generation: Password Policy Coverage",
+        winner: "Tie",
+        cassandraScore: 4.0,
+        medeaScore: 4.0,
+        costCassandra: "$1.70587100",
+        costMedea: "$3.17276430",
+        summary: "Both reported coverage above threshold. CASSANDRA is cleaner and more focused; MEDEA is more reproducible locally.",
+        cassandra: ["Seven focused test classes", "Reported 99.8% line / 96.9% branch targeted coverage", "Evaluator rerun failed due Mockito inline Byte Buddy attachment"],
+        medea: ["Two comprehensive test classes", "Reported 94.8% line / 94.2% branch package coverage", "Evaluator offline Maven run passed: 46 tests, BUILD SUCCESS"]
+      }
+    ];
+
+    function activateTab(id) {
+      document.querySelectorAll(".tab").forEach((tab) => {
+        const selected = tab.dataset.tab === id;
+        tab.setAttribute("aria-selected", selected ? "true" : "false");
+      });
+      document.querySelectorAll(".section").forEach((section) => {
+        section.classList.toggle("active", section.id === id);
+      });
+    }
+
+    document.querySelectorAll(".tab").forEach((tab) => {
+      tab.addEventListener("click", () => activateTab(tab.dataset.tab));
+    });
+
+    function renderScoreBars() {
+      const host = document.getElementById("scoreBars");
+      host.innerHTML = scoreData.map((row) => {
+        const cassW = (row.cassandra / 5 * 100).toFixed(1);
+        const medW = (row.medea / 5 * 100).toFixed(1);
+        return `
+          <div>
+            <div class="bar-row">
+              <strong>${row.category}</strong>
+              <div class="bar-track"><div class="bar-fill" style="--w:${cassW}%"></div></div>
+              <span class="num">C ${row.cassandra.toFixed(1)}</span>
+            </div>
+            <div class="bar-row">
+              <span class="subtle">${row.winner === "Tie" ? "Tie" : "MEDEA"}</span>
+              <div class="bar-track"><div class="bar-fill medea" style="--w:${medW}%"></div></div>
+              <span class="num">M ${row.medea.toFixed(1)}</span>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function renderTasks() {
+      const query = document.getElementById("taskSearch").value.trim().toLowerCase();
+      const filter = document.getElementById("winnerFilter").value;
+      const host = document.getElementById("taskList");
+
+      const filtered = tasks.filter((task) => {
+        const text = [
+          task.title,
+          task.winner,
+          task.summary,
+          task.cassandra.join(" "),
+          task.medea.join(" ")
+        ].join(" ").toLowerCase();
+        return (filter === "all" || task.winner === filter) && (!query || text.includes(query));
+      });
+
+      host.innerHTML = filtered.map((task, index) => {
+        const winnerClass = task.winner === "Tie" ? "tie" : task.winner === "CASSANDRA" ? "cass" : "medea";
+        return `
+          <details ${index === 0 ? "open" : ""} data-winner="${task.winner}">
+            <summary>
+              <span>
+                <span class="title">
+                  ${task.title}
+                  <span class="pill ${winnerClass}">${task.winner}</span>
+                </span>
+                <span class="meta">Scores: CASSANDRA ${task.cassandraScore.toFixed(1)} / MEDEA ${task.medeaScore.toFixed(1)}. Costs: ${task.costCassandra} / ${task.costMedea}.</span>
+              </span>
+              <span class="subtle">Open</span>
+            </summary>
+            <div class="details-body">
+              <p>${task.summary}</p>
+              <div class="compare">
+                <div class="model-panel cass">
+                  <h4><span>CASSANDRA</span><span>${task.cassandraScore.toFixed(1)} / 5</span></h4>
+                  <ul>${task.cassandra.map((item) => `<li>${item}</li>`).join("")}</ul>
+                </div>
+                <div class="model-panel medea">
+                  <h4><span>MEDEA</span><span>${task.medeaScore.toFixed(1)} / 5</span></h4>
+                  <ul>${task.medea.map((item) => `<li>${item}</li>`).join("")}</ul>
+                </div>
+              </div>
+            </div>
+          </details>
+        `;
+      }).join("") || `<div class="callout">No tasks match the current filter.</div>`;
+    }
+
+    document.getElementById("taskSearch").addEventListener("input", renderTasks);
+    document.getElementById("winnerFilter").addEventListener("change", renderTasks);
+
+    document.querySelector("[data-action='expand']").addEventListener("click", () => {
+      document.querySelectorAll("details").forEach((detail) => detail.open = true);
+    });
+
+    document.querySelector("[data-action='collapse']").addEventListener("click", () => {
+      document.querySelectorAll("details").forEach((detail) => detail.open = false);
+    });
+
+    document.querySelectorAll("table[data-sortable] th").forEach((th, index) => {
+      th.addEventListener("click", () => {
+        const table = th.closest("table");
+        const tbody = table.querySelector("tbody");
+        const rows = Array.from(tbody.querySelectorAll("tr"));
+        const direction = th.dataset.direction === "asc" ? "desc" : "asc";
+        th.dataset.direction = direction;
+
+        rows.sort((a, b) => {
+          const av = a.children[index].innerText.replace(/[$,]/g, "").trim();
+          const bv = b.children[index].innerText.replace(/[$,]/g, "").trim();
+          const an = Number.parseFloat(av);
+          const bn = Number.parseFloat(bv);
+          const result = Number.isFinite(an) && Number.isFinite(bn)
+            ? an - bn
+            : av.localeCompare(bv);
+          return direction === "asc" ? result : -result;
+        });
+        rows.forEach((row) => tbody.appendChild(row));
+      });
+    });
+
+    renderScoreBars();
+    renderTasks();
+  </script>
+</body>
+</html>
